@@ -14,7 +14,7 @@ export default {
       ],
     },
   ],
-  dynamicPaths: ["/pip", "/pip/traffic-summary", "/pip/zone-analysis"],
+  dynamicPaths: ["/pip/", "/pip/traffic-summary", "/pip/zone-analysis"],
 
   // Some additional configuration options and their defaults:
   // theme: "default", // try "light", "dark", "slate", etc.
