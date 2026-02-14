@@ -1,7 +1,7 @@
 export default {
   // ontent to add to the head of the page, e.g. for a favicon:
   head: '<link rel="icon" href="observable.png" type="image/png" sizes="32x32">',
-  title: "Movement Intelligence Report",
+  title: "Rhevia",
   root: "src",
   sidebar: true,
   pages: [
@@ -9,17 +9,17 @@ export default {
       name: "Portsmouth International Port",
       pages: [
         { name: "Executive Summary", path: "/pip/" },
-        { name: "Traffic Summary", path: "/pip/traffic-summary" },
-        { name: "Zone Analysis", path: "/pip/zone-analysis" },
+        { name: "Movement Report", path: "/pip/movement-report" },
+        { name: "Closing Remarks", path: "/pip/closing-remarks" },
       ],
     },
   ],
-  dynamicPaths: ["/pip/", "/pip/traffic-summary", "/pip/zone-analysis"],
+  dynamicPaths: ["/pip/", "/pip/movement-report", "/pip/closing-remarks"],
 
   // Some additional configuration options and their defaults:
   // theme: "default", // try "light", "dark", "slate", etc.
-  // header: "", // what to show in the header (HTML)
-  // footer: "Built with Observable.", // what to show in the footer (HTML)
+  header: "Rhevia: Movement Intelligence Report", // page header (defaults to title)
+  footer: `Produced ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} · Powered by Rhevia`,
   // sidebar: true, // whether to show the sidebar
   // toc: true, // whether to show the table of contents
   // pager: true, // whether to show previous & next links in the footer
