@@ -20,7 +20,7 @@ const periodLabel = formatPeriod(summary.period.start, summary.period.end);
 </div>
 
 <div class="sub-heading">
-  This report presents a comprehensive analysis of movement activity recorded at <b>${name}</b> during the reporting period. It consolidates detection volumes, spatial density patterns, speed profiles, directional flow, and zone/area-level breakdowns into a single report, designed to support operational awareness and decision-making.
+  This report presents a comprehensive analysis of movement activity recorded for <b>${name}</b> during the reporting period. It consolidates detection volumes, spatial density patterns, speed profiles, directional flow, and zone/area-level breakdowns into a single report, designed to support operational awareness and decision-making.
 </div>
 
 ---

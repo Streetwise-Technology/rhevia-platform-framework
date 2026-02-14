@@ -1,20 +1,34 @@
+import "dotenv/config";
+
+const ORG_NAMES = {
+  pip: "Portsmouth International Port",
+  tfl: "Transport for London",
+};
+
+const org = process.env.ORG_SUBDOMAIN || "pip";
+const orgDisplayName = ORG_NAMES[org] || org;
+
 export default {
-  // ontent to add to the head of the page, e.g. for a favicon:
+  // Content to add to the head of the page, e.g. for a favicon:
   head: '<link rel="icon" href="observable.png" type="image/png" sizes="32x32">',
   title: "Rhevia",
   root: "src",
   sidebar: true,
   pages: [
     {
-      name: "Portsmouth International Port",
+      name: orgDisplayName,
       pages: [
-        { name: "Executive Summary", path: "/pip/" },
-        { name: "Movement Report", path: "/pip/movement-report" },
-        { name: "Closing Remarks", path: "/pip/closing-remarks" },
+        { name: "Executive Summary", path: `/${org}/` },
+        { name: "Movement Report", path: `/${org}/movement-report` },
+        { name: "Closing Remarks", path: `/${org}/closing-remarks` },
       ],
     },
   ],
-  dynamicPaths: ["/pip/", "/pip/movement-report", "/pip/closing-remarks"],
+  dynamicPaths: [
+    `/${org}/`,
+    `/${org}/movement-report`,
+    `/${org}/closing-remarks`,
+  ],
 
   // Some additional configuration options and their defaults:
   // theme: "default", // try "light", "dark", "slate", etc.

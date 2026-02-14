@@ -50,7 +50,3 @@ All data is processed and stored in accordance with applicable data protection r
 ## Contact
 
 For questions regarding this report, to request additional analysis, or to discuss findings in further detail, please contact your Rhevia account representative.
-
-<p style="color: #6b7280; font-size: 12px; text-align: center; margin-top: 32px;">
-  Generated ${new Date().toLocaleDateString()} · Powered by Rhevia
-</p>

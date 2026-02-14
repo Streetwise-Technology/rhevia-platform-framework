@@ -8,7 +8,6 @@ import type { HeatmapCell, TrackPoint } from "./charts.js";
 import * as d3 from "npm:d3";
 import deck from "npm:deck.gl";
 import mapboxgl from "npm:mapbox-gl";
-// @observablehq/inputs no longer needed — pills replace checkbox/radio
 
 const { MapboxOverlay, TripsLayer } = deck;
 
@@ -713,6 +712,12 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
         opacity: 0.8,
         colorRange: COLOR_RANGE,
         visible: layerVisibility.includes("Density Hexagons"),
+        transitions: {
+          elevationScale: {
+            duration: 1200,
+            easing: (t: number) => 1 - Math.pow(1 - t, 3),
+          },
+        },
       }),
       new TripsLayer({
         id: "trips",
