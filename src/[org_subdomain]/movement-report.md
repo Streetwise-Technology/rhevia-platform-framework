@@ -65,6 +65,7 @@ const typeFilter = Generators.input(typeForm);
 function typePills() {
   const options = ["All", "Pedestrian", "Vehicle"];
   const div = document.createElement("div");
+  div.classList.add("no-print");
   Object.assign(div.style, {
     display: "flex", gap: "6px", marginBottom: "4px", marginTop: "6px",
   });
@@ -251,7 +252,7 @@ const timelineStyle = Generators.input(timelineStyleInput);
 
 ### Activity Timeline
 
-${timelineStyleInput}
+<span class="no-print">${timelineStyleInput}</span>
 
 Detection frequency over time, binned in 5-minute intervals and stacked by object type. Hover over a bar for details.
 
@@ -346,8 +347,8 @@ const rawFiltered = Generators.input(rawSearch);
 <div class="grid grid-cols-1" style="margin-top: 12px;">
 <div class="card">
 
-${typePills()} ${rawSourceInput}
-${rawSearch}
+<span class="no-print">${typePills()} ${rawSourceInput}</span>
+<span class="no-print">${rawSearch}</span>
 
 ```js
 const rawColumns = rawSourceFilter === "Heatmap"

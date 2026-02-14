@@ -104,15 +104,19 @@ for (const { path, name } of PAGES) {
   const page = await context.newPage();
   await page.goto(url, { waitUntil: "networkidle" });
 
-  // Extra wait for WebGL content (deck.gl / MapBox maps)
-  await page.waitForTimeout(3000);
+  // Wait for Observable cells to finish loading, then a short buffer for charts
+  await page.waitForFunction(
+    () => document.querySelectorAll("observablehq-loading").length === 0,
+    { timeout: 15000 }
+  ).catch(() => {}); // continue even if the selector never appeared
+  await page.waitForTimeout(2000);
 
   const pdfPath = join(outputDir, `${name}.pdf`);
   await page.pdf({
     path: pdfPath,
     format: "A4",
     printBackground: true,
-    margin: { top: "1cm", bottom: "1cm", left: "1cm", right: "1cm" },
+    margin: { top: "1.5cm", bottom: "2cm", left: "1.5cm", right: "1.5cm" },
   });
 
   pdfPaths.push(pdfPath);

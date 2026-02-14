@@ -1,0 +1,126 @@
+@media print {
+
+  /* === COLOR PRESERVATION ===
+     Ensure the dark slate theme backgrounds and colors render faithfully. */
+  html {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* === HIDE FRAMEWORK CHROME ===
+     Sidebar, toggle, and backdrop are navigation-only. */
+  #observablehq-sidebar,
+  #observablehq-sidebar-toggle,
+  #observablehq-sidebar-backdrop {
+    display: none !important;
+  }
+
+  /* Reclaim the space the sidebar occupied */
+  #observablehq-center {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  /* === HERO SECTION — REDUCE PRINT FOOTPRINT ===
+     Screen hero uses margin: 4rem 0 8rem and h1 at 14vw / 90px.
+     Shrink substantially so KPI cards are visible on page 1. */
+  .hero {
+    margin: 1.5rem 0 2rem !important;
+  }
+
+  .hero h1 {
+    font-size: 36px !important;
+    /* Gradient text (-webkit-text-fill-color: transparent + background-clip)
+       can produce invisible text in print. Force solid colour. */
+    -webkit-text-fill-color: currentColor !important;
+    background: none !important;
+  }
+
+  .hero h2 {
+    font-size: 16px !important;
+  }
+
+  /* === PAGE BREAK MANAGEMENT ===
+     Prevent content from splitting mid-element across pages. */
+  .card {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .grid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Keep headings attached to their following content */
+  h2 {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  .card h3 {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  /* SVG charts and figures should never split */
+  figure,
+  svg {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* === HIDE INTERACTIVE CONTROLS ===
+     Pill toggles, radio buttons, search boxes — meaningless in PDF.
+     Elements marked with .no-print in the page source. */
+  .no-print {
+    display: none !important;
+  }
+
+  /* === COLLAPSE MAP ===
+     deck.gl / MapBox WebGL cannot render in the print pipeline.
+     Hide the map and show a placeholder. */
+  .mapboxgl-map,
+  .mapboxgl-control-container {
+    display: none !important;
+  }
+
+  /* Placeholder text inside the map card */
+  #spatial-activity-map + .grid .card::after {
+    content: "Interactive map — view the online report for the spatial activity map.";
+    display: block;
+    text-align: center;
+    font-style: italic;
+    color: var(--theme-foreground-muted);
+    padding: 2rem 1rem;
+    font-size: 13px;
+  }
+
+  /* === RELEASE MAX-WIDTH CAPS ===
+     Observable Framework caps paragraph/table/heading width at ~640px.
+     In print, use the full A4 page width. */
+  p,
+  table,
+  figure,
+  figcaption,
+  h1, h2, h3, h4, h5, h6,
+  blockquote,
+  ol, ul {
+    max-width: none !important;
+  }
+
+  .sub-heading {
+    max-width: none !important;
+  }
+
+  /* === TYPOGRAPHY — PRINT DENSITY ===
+     Slightly reduce base font for better A4 density. */
+  #observablehq-main {
+    font-size: 14px;
+  }
+
+  /* === GRID LAYOUT ADJUSTMENTS === */
+  .grid {
+    grid-auto-rows: auto !important;
+  }
+}

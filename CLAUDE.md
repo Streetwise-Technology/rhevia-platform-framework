@@ -24,6 +24,7 @@ npm run dev                          # Local preview server
 npm run build                        # Build static site → dist/
 npm run clean                        # Clear Observable cache
 npm run promote -- <org> <start> <end> [--pdf]  # Build + upload to GCS
+node scripts/generate-pdf.js --org <slug>        # Generate PDF from existing dist/
 ```
 
 ## Environment variables
@@ -40,4 +41,6 @@ npm run promote -- <org> <start> <end> [--pdf]  # Build + upload to GCS
 
 ## Promotion pipeline
 
-Reports are promoted via `scripts/promote-report.sh` (locally or via GitHub Actions `promote-report.yml` workflow_dispatch). Each promoted report is a self-contained snapshot uploaded to `gs://rhevia-movement-intelligence-reports/{org}/{period}/`. GCS is the source of truth — no Firestore.
+Local promotion requires the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) (`gcloud auth login` to authenticate, which provides `gsutil`).
+
+Reports are promoted via `scripts/promote-report.sh` (locally or via GitHub Actions `promote-report.yml` workflow_dispatch). Each promoted report is a self-contained snapshot uploaded to `gs://rhevia-data-reports/{org}/{period}/`. GCS is the source of truth — no Firestore.

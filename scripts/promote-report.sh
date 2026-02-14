@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Load .env if present (CI injects env vars directly)
+if [[ -f .env ]]; then
+  set -a
+  source .env
+  set +a
+fi
+
 # promote-report.sh — Build a report and upload to GCS as an immutable snapshot.
 #
 # Usage:
@@ -10,7 +17,7 @@ set -euo pipefail
 #   ./scripts/promote-report.sh pip "2026-01-19T00:00:00Z" "2026-01-20T00:00:00Z"
 #   ./scripts/promote-report.sh pip "2026-01-19T00:00:00Z" "2026-01-20T00:00:00Z" --pdf
 
-GCS_BUCKET="gs://rhevia-movement-intelligence-reports"
+GCS_BUCKET="gs://rhevia-data-reports"
 
 # --- Parse arguments --------------------------------------------------------
 

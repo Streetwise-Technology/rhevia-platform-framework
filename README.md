@@ -79,6 +79,8 @@ The primary workflow is **develop, preview, promote**. Reports are developed loc
 
 ### Local promotion
 
+Requires [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) — install via `brew install google-cloud-sdk`, then `gcloud auth login` to authenticate.
+
 ```bash
 # Build and upload
 npm run promote -- pip "2026-01-19T00:00:00Z" "2026-01-20T00:00:00Z"
@@ -99,7 +101,7 @@ npm run promote -- pip "2026-01-19T00:00:00Z" "2026-01-20T00:00:00Z" --pdf
 ### GCS path structure
 
 ```plaintext
-gs://rhevia-movement-intelligence-reports/
+gs://rhevia-data-reports/
 └── {org_subdomain}/
     └── {start_date}_to_{end_date}/
         ├── index.html
@@ -157,5 +159,6 @@ No changes to page templates or components are needed — the `[org_subdomain]` 
 | `npm run build` | Build static site to `./dist` |
 | `npm run clean` | Clear the Observable data loader cache |
 | `npm run promote -- <org> <start> <end> [--pdf]` | Build, upload to GCS, optionally generate PDF |
+| `node scripts/generate-pdf.js --org <slug>` | Generate PDF from an existing `dist/` build |
 | `npm run deploy` | Deploy to Observable cloud |
 | `npm run observable` | Run Observable CLI commands |
