@@ -1,0 +1,72 @@
+name: Promote Report
+
+on:
+  workflow_dispatch:
+    inputs:
+      org_subdomain:
+        description: "Organisation subdomain (e.g. pip)"
+        required: true
+        type: string
+      period_start:
+        description: "Period start ISO 8601 (e.g. 2026-01-19T00:00:00Z)"
+        required: true
+        type: string
+      period_end:
+        description: "Period end ISO 8601 (e.g. 2026-01-20T00:00:00Z)"
+        required: true
+        type: string
+      generate_pdf:
+        description: "Generate PDF report"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install Playwright browsers
+        if: ${{ inputs.generate_pdf }}
+        run: npx playwright install --with-deps chromium
+
+      - name: Promote report
+        env:
+          MAPBOX_TOKEN: ${{ secrets.MAPBOX_TOKEN }}
+        run: |
+          bash scripts/promote-report.sh \
+            "${{ inputs.org_subdomain }}" \
+            "${{ inputs.period_start }}" \
+            "${{ inputs.period_end }}" \
+            ${{ inputs.generate_pdf && '--pdf' || '' }}

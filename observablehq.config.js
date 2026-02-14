@@ -1,31 +1,39 @@
-// See https://observablehq.com/framework/config for documentation.
+import "dotenv/config";
+
+const ORG_NAMES = {
+  pip: "Portsmouth International Port",
+  tfl: "Transport for London",
+};
+
+const org = process.env.ORG_SUBDOMAIN || "pip";
+const orgDisplayName = ORG_NAMES[org] || org;
+
 export default {
-  // The app’s title; used in the sidebar and webpage titles.
-  title: "Rhevia Insights",
-
-  // The pages and sections in the sidebar. If you don’t specify this option,
-  // all pages will be listed in alphabetical order. Listing pages explicitly
-  // lets you organize them into sections and have unlisted pages.
-  // pages: [
-  //   {
-  //     name: "Examples",
-  //     pages: [
-  //       {name: "Dashboard", path: "/example-dashboard"},
-  //       {name: "Report", path: "/example-report"}
-  //     ]
-  //   }
-  // ],
-
   // Content to add to the head of the page, e.g. for a favicon:
   head: '<link rel="icon" href="observable.png" type="image/png" sizes="32x32">',
-
-  // The path to the source root.
+  title: "Rhevia",
   root: "src",
+  sidebar: true,
+  pages: [
+    {
+      name: orgDisplayName,
+      pages: [
+        { name: "Executive Summary", path: `/${org}/` },
+        { name: "Movement Report", path: `/${org}/movement-report` },
+        { name: "Closing Remarks", path: `/${org}/closing-remarks` },
+      ],
+    },
+  ],
+  dynamicPaths: [
+    `/${org}/`,
+    `/${org}/movement-report`,
+    `/${org}/closing-remarks`,
+  ],
 
   // Some additional configuration options and their defaults:
   // theme: "default", // try "light", "dark", "slate", etc.
-  // header: "", // what to show in the header (HTML)
-  // footer: "Built with Observable.", // what to show in the footer (HTML)
+  header: "Rhevia: Movement Intelligence Report", // page header (defaults to title)
+  footer: `Produced ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} · Powered by Rhevia`,
   // sidebar: true, // whether to show the sidebar
   // toc: true, // whether to show the table of contents
   // pager: true, // whether to show previous & next links in the footer
@@ -35,4 +43,5 @@ export default {
   // typographer: false, // smart quotes and other typographic improvements
   // preserveExtension: false, // drop .html from URLs
   // preserveIndex: false, // drop /index from URLs
+  // theme: ["dashboard", "midnight"],
 };
