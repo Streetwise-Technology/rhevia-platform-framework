@@ -1,9 +1,9 @@
 // org-meta.js — Org subdomain to display name mapping
 
-const orgs = {
+const orgs: Record<string, string> = {
   pip: "Portsmouth International Port",
 };
 
-export function orgName(slug) {
+export function orgName(slug: string): string {
   return orgs[slug] ?? slug;
 }
