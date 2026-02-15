@@ -1,11 +1,11 @@
 import "dotenv/config";
 
 const ORG_NAMES = {
-  pip: "Portsmouth International Port",
+  fif: "Portsmouth International Port", // Should be "pip" to match subdomain, but needs to match dataset. TODO: update data source to match subdomain and update this mapping.
   tfl: "Transport for London",
 };
 
-const org = process.env.ORG_SUBDOMAIN || "pip";
+const org = process.env.ORG_SUBDOMAIN || "fif"; // Ditto above about matching subdomain and dataset.
 const orgDisplayName = ORG_NAMES[org] || org;
 
 export default {
