@@ -53,6 +53,7 @@ export interface MovementMapHandle {
   lightPresetForm: HTMLFormElement;
   lightPillsContainer: HTMLDivElement;
   currentStyle: string;
+  timeMin: number;
   buildLayers(opts: {
     layerVisibility: string[];
     currentTime: number;
@@ -446,7 +447,7 @@ export interface Trip {
   timestamps: number[];
 }
 
-export function preprocessTrips(tracks: TrackPoint[]): Trip[] {
+export function preprocessTrips(tracks: TrackPoint[], timeOffset: number = 0): Trip[] {
   const trackGroups = d3.group(tracks, (d: TrackPoint) => d.track_id);
   return Array.from(trackGroups, ([trackId, points]) => {
     const sorted = [...points].sort(
@@ -459,7 +460,7 @@ export function preprocessTrips(tracks: TrackPoint[]): Trip[] {
       coordinates: sorted.map(
         (p) => [p.longitude, p.latitude] as [number, number],
       ),
-      timestamps: sorted.map((p) => new Date(p.timestamp).getTime()),
+      timestamps: sorted.map((p) => new Date(p.timestamp).getTime() - timeOffset),
     };
   });
 }
@@ -488,8 +489,9 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
   const timestamps = tracks.map((d) => new Date(d.timestamp).getTime());
   const timeMin = Math.min(...timestamps);
   const timeMax = Math.max(...timestamps);
+  const timeRange = timeMax - timeMin;
 
-  const trips = preprocessTrips(tracks);
+  const trips = preprocessTrips(tracks, timeMin);
 
   // ── Create Observable Inputs ───────────────────────────────────
 
@@ -499,7 +501,7 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
   );
 
   const hexSlider = createLabeledSlider("Hexagon height", 0, 10, {
-    step: 0.5,
+    step: 0.2,
     value: 0.2,
   });
   const hexWidthSlider = createLabeledSlider("Hexagon width", 5, 50, {
@@ -511,13 +513,13 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
     value: "mapbox://styles/mapbox/standard",
   });
 
-  const scrubberForm = createScrubber(timeMin, timeMax, {
-    step: 50,
+  const scrubberForm = createScrubber(0, timeRange, {
+    step: 5000,
     delay: 50,
     loop: true,
     autoplay: false,
     format: (d) =>
-      new Date(d).toLocaleTimeString("en-GB", {
+      new Date(d + timeMin).toLocaleTimeString("en-GB", {
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
@@ -733,7 +735,7 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
           d.objectType === "pedestrian" ? PEDESTRIAN_COLOR : VEHICLE_COLOR,
         widthMinPixels: 4,
         fadeTrail: true,
-        trailLength: 8000,
+        trailLength: 180000,
         currentTime,
         visible: layerVisibility.includes("Track Playback"),
       }),
@@ -765,6 +767,7 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
     lightPresetForm,
     lightPillsContainer,
     currentStyle: "mapbox://styles/mapbox/standard" as string,
+    timeMin,
     buildLayers,
   };
 }

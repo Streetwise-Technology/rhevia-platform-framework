@@ -1,19 +1,7 @@
 import React from "npm:react";
 import * as d3 from "npm:d3";
 
-interface TrackPoint {
-  track_id: string;
-  object_type: string;
-  device_id: string;
-  longitude: number;
-  latitude: number;
-  timestamp: string;
-  speed: number;
-  heading: number;
-  zones_hit: string[];
-}
-
-interface DirectionBin {
+export interface DirectionBin {
   label: string;
   pedestrian: number;
   vehicle: number;
@@ -30,17 +18,6 @@ const COLOR_RANGES = {
   combined: ["#ffffb2", "#fecc5c", "#fd8d3c", "#f03b20", "#bd0026"],
 };
 
-const DIRECTIONS = [
-  { label: "N", center: 0, min: 337.5, max: 22.5 },
-  { label: "NE", center: 45, min: 22.5, max: 67.5 },
-  { label: "E", center: 90, min: 67.5, max: 112.5 },
-  { label: "SE", center: 135, min: 112.5, max: 157.5 },
-  { label: "S", center: 180, min: 157.5, max: 202.5 },
-  { label: "SW", center: 225, min: 202.5, max: 247.5 },
-  { label: "W", center: 270, min: 247.5, max: 292.5 },
-  { label: "NW", center: 315, min: 292.5, max: 337.5 },
-];
-
 function buildColorScale(colors: string[], domain: [number, number]) {
   const stops = colors.map(
     (_, i) => domain[0] + (i / (colors.length - 1)) * (domain[1] - domain[0]),
@@ -53,50 +30,7 @@ function buildColorScale(colors: string[], domain: [number, number]) {
     .clamp(true);
 }
 
-function aggregateDirections(tracks: TrackPoint[]): DirectionBin[] {
-  const bins: Record<
-    string,
-    { ped: number; veh: number; pedSpeedSum: number; vehSpeedSum: number }
-  > = {};
-  for (const dir of DIRECTIONS)
-    bins[dir.label] = { ped: 0, veh: 0, pedSpeedSum: 0, vehSpeedSum: 0 };
-
-  for (const t of tracks) {
-    const h = ((t.heading % 360) + 360) % 360;
-    for (const dir of DIRECTIONS) {
-      const match =
-        dir.label === "N"
-          ? h >= dir.min || h < dir.max
-          : h >= dir.min && h < dir.max;
-      if (match) {
-        if (t.object_type === "pedestrian") {
-          bins[dir.label].ped++;
-          bins[dir.label].pedSpeedSum += t.speed;
-        } else {
-          bins[dir.label].veh++;
-          bins[dir.label].vehSpeedSum += t.speed;
-        }
-        break;
-      }
-    }
-  }
-
-  return DIRECTIONS.map((dir) => {
-    const b = bins[dir.label];
-    const total = b.ped + b.veh;
-    return {
-      label: dir.label,
-      pedestrian: b.ped,
-      vehicle: b.veh,
-      total,
-      pedAvgSpeed: b.ped > 0 ? b.pedSpeedSum / b.ped : 0,
-      vehAvgSpeed: b.veh > 0 ? b.vehSpeedSum / b.veh : 0,
-      avgSpeed: total > 0 ? (b.pedSpeedSum + b.vehSpeedSum) / total : 0,
-    };
-  });
-}
-
-export function DirectionRose({ tracks }: { tracks: TrackPoint[] }) {
+export function DirectionRose({ data }: { data: DirectionBin[] }) {
   const [tooltip, setTooltip] = React.useState<{
     x: number;
     y: number;
@@ -109,7 +43,6 @@ export function DirectionRose({ tracks }: { tracks: TrackPoint[] }) {
   const innerRadius = 20;
   const center = size / 2;
 
-  const data = aggregateDirections(tracks);
   const maxTotal = d3.max(data, (d: DirectionBin) => d.total) || 1;
 
   // Determine rendering mode

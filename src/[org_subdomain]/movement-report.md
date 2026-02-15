@@ -39,13 +39,21 @@ import {formatPeriod} from "../utils/format.js";
 import {createActivityTimeline, createActivityArea, createSpeedProfile} from "../components/charts.js";
 import {DirectionRose} from "../components/direction-rose.js";
 import {createMovementMap, preprocessTrips} from "../components/deck-map.js";
-import * as d3 from "npm:d3";
 
 const summary = await FileAttachment(`../data/${observable.params.org_subdomain}/summary.json`).json();
-const tracks = await FileAttachment(`../data/${observable.params.org_subdomain}/tracks.json`).json();
-const heatmap = await FileAttachment(`../data/${observable.params.org_subdomain}/heatmap.json`).json();
 const MAPBOX_TOKEN = await FileAttachment("../data/mapbox-token.json").json();
 const periodLabel = formatPeriod(summary.period.start, summary.period.end);
+
+// Pre-aggregated stats data
+const timeline = await FileAttachment(`../data/${observable.params.org_subdomain}/timeline.json`).json();
+const speedProfile = await FileAttachment(`../data/${observable.params.org_subdomain}/speed-profile.json`).json();
+const directionRoseData = await FileAttachment(`../data/${observable.params.org_subdomain}/direction-rose.json`).json();
+const zoneStatsRaw = await FileAttachment(`../data/${observable.params.org_subdomain}/zone-stats.json`).json();
+const heatmap = await FileAttachment(`../data/${observable.params.org_subdomain}/heatmap.json`).json();
+
+// Map data (thinned/aggregated for Deck.GL performance)
+const mapTracks = await FileAttachment(`../data/${observable.params.org_subdomain}/map-tracks.json`).json();
+const mapHeatmap = await FileAttachment(`../data/${observable.params.org_subdomain}/map-heatmap.json`).json();
 ```
 
 
@@ -106,73 +114,131 @@ function typePills() {
 
 ```js
 // === FILTERED DATA ===
-const filteredTracks = typeFilter === "All"
-  ? tracks
-  : tracks.filter(d => d.object_type === typeFilter.toLowerCase());
+const filterKey = typeFilter === "All" ? "all" : typeFilter.toLowerCase();
 
+// Timeline filtering (pre-binned 5-minute counts)
+const filteredTimeline = typeFilter === "All"
+  ? timeline
+  : timeline.filter(d => d.object_type === typeFilter.toLowerCase());
+
+// Speed profile filtering (per-track avg speed)
+const filteredSpeedProfile = typeFilter === "All"
+  ? speedProfile
+  : speedProfile.filter(d => d.object_type === typeFilter.toLowerCase());
+
+// Direction rose: assemble DirectionBin[] from pre-aggregated rows
+const ROSE_DIRECTIONS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+const filteredDirectionRose = (() => {
+  const filtered = typeFilter === "All"
+    ? directionRoseData
+    : directionRoseData.filter(d => d.object_type === typeFilter.toLowerCase());
+
+  const byDir = new Map();
+  for (const d of filtered) {
+    if (!byDir.has(d.direction)) byDir.set(d.direction, []);
+    byDir.get(d.direction).push(d);
+  }
+
+  return ROSE_DIRECTIONS.map(dir => {
+    const rows = byDir.get(dir) || [];
+    const ped = rows.find(r => r.object_type === "pedestrian");
+    const veh = rows.find(r => r.object_type === "vehicle");
+    const pedCount = ped?.count || 0;
+    const vehCount = veh?.count || 0;
+    const pedSpeedSum = ped?.speed_sum || 0;
+    const vehSpeedSum = veh?.speed_sum || 0;
+    const total = pedCount + vehCount;
+    return {
+      label: dir,
+      pedestrian: pedCount,
+      vehicle: vehCount,
+      total,
+      pedAvgSpeed: pedCount > 0 ? pedSpeedSum / pedCount : 0,
+      vehAvgSpeed: vehCount > 0 ? vehSpeedSum / vehCount : 0,
+      avgSpeed: total > 0 ? (pedSpeedSum + vehSpeedSum) / total : 0,
+    };
+  });
+})();
+
+// Zone stats: aggregate filtered rows by zone
+const filteredZoneStats = (() => {
+  const filtered = typeFilter === "All"
+    ? zoneStatsRaw
+    : zoneStatsRaw.filter(d => d.object_type === typeFilter.toLowerCase());
+
+  const byZone = new Map();
+  for (const d of filtered) {
+    if (!byZone.has(d.zone)) byZone.set(d.zone, {detections: 0, speedSum: 0, ped: 0, veh: 0});
+    const z = byZone.get(d.zone);
+    z.detections += d.detections;
+    z.speedSum += d.speed_sum;
+    if (d.object_type === "pedestrian") z.ped += d.detections;
+    else z.veh += d.detections;
+  }
+
+  return Array.from(byZone, ([zone, z]) => ({
+    Zone: zone.replace(/_/g, " "),
+    Detections: z.detections,
+    "Avg Speed": z.detections > 0 ? +(z.speedSum / z.detections).toFixed(1) : 0,
+    "Pedestrian %": z.detections > 0 ? Math.round((z.ped / z.detections) * 100) : 0,
+    "Vehicle %": z.detections > 0 ? Math.round((z.veh / z.detections) * 100) : 0,
+  })).sort((a, b) => b.Detections - a.Detections);
+})();
+
+// Summary: derive from pre-aggregated summary.json based on type filter
+const filteredSummary = (() => {
+  const total = typeFilter === "All" ? summary.total_detections
+    : typeFilter === "Pedestrian" ? summary.pedestrian_count
+    : summary.vehicle_count;
+  const pedCount = typeFilter === "Vehicle" ? 0 : summary.pedestrian_count;
+  const vehCount = typeFilter === "Pedestrian" ? 0 : summary.vehicle_count;
+
+  const avgSpeed = typeFilter === "All" ? summary.avg_speed
+    : typeFilter === "Pedestrian" ? summary.ped_avg_speed
+    : summary.veh_avg_speed;
+  const topSpeed = typeFilter === "All" ? summary.top_speed
+    : typeFilter === "Pedestrian" ? summary.ped_top_speed
+    : summary.veh_top_speed;
+
+  const hours = (() => {
+    const s = new Date(summary.period.start).getTime();
+    const e = new Date(summary.period.end).getTime();
+    return Math.max((e - s) / 3600000, 1);
+  })();
+
+  return {
+    total_detections: total,
+    pedestrian_count: pedCount,
+    vehicle_count: vehCount,
+    composition: {
+      pedestrian_pct: total > 0 ? Math.round((pedCount / total) * 100) : 0,
+      vehicle_pct: total > 0 ? Math.round((vehCount / total) * 100) : 0,
+    },
+    avg_speed: avgSpeed,
+    top_speed: topSpeed,
+    flow_rate_per_hour: Math.round(total / hours),
+    peak_hour: summary.peak_hour,
+    zones_active: summary.zones_active,
+    period: summary.period,
+    directions: summary.directions_4way?.[filterKey] || {},
+  };
+})();
+
+// Heatmap filtering (for raw data table)
 const filteredHeatmap = typeFilter === "All"
   ? heatmap
   : heatmap.filter(d => d.object_type === typeFilter.toLowerCase());
 
-const filteredTrips = preprocessTrips(filteredTracks);
+// Map filtering (thinned/aggregated data for Deck.GL)
+const filteredMapTracks = typeFilter === "All"
+  ? mapTracks
+  : mapTracks.filter(d => d.object_type === typeFilter.toLowerCase());
 
-const directionBreakdown = (() => {
-  const counts = {North: 0, South: 0, East: 0, West: 0};
-  for (const d of filteredTracks) {
-    const h = d.heading;
-    if (h >= 315 || h < 45) counts.North++;
-    else if (h >= 45 && h < 135) counts.East++;
-    else if (h >= 135 && h < 225) counts.South++;
-    else counts.West++;
-  }
-  return counts;
-})();
+const filteredMapHeatmap = typeFilter === "All"
+  ? mapHeatmap
+  : mapHeatmap.filter(d => d.object_type === typeFilter.toLowerCase());
 
-const pedCount = filteredTracks.filter(d => d.object_type === "pedestrian").length;
-const vehCount = filteredTracks.filter(d => d.object_type === "vehicle").length;
-const total = filteredTracks.length;
-
-const filteredSummary = {
-  total_detections: total,
-  pedestrian_count: pedCount,
-  vehicle_count: vehCount,
-  composition: {
-    pedestrian_pct: total > 0 ? Math.round((pedCount / total) * 100) : 0,
-    vehicle_pct: total > 0 ? Math.round((vehCount / total) * 100) : 0,
-  },
-  avg_speed: Math.round((d3.mean(filteredTracks, d => d.speed) || 0) * 10) / 10,
-  top_speed: Math.round((d3.max(filteredTracks, d => d.speed) || 0) * 10) / 10,
-  flow_rate_per_hour: total,
-  peak_hour: summary.peak_hour,
-  zones_active: summary.zones_active,
-  period: summary.period,
-  directions: directionBreakdown,
-};
-
-// Zone statistics derived from filtered tracks
-const zoneCounts = new Map();
-for (const point of filteredTracks) {
-  for (const zone of point.zones_hit) {
-    if (!zoneCounts.has(zone)) {
-      zoneCounts.set(zone, {zone, detections: 0, totalSpeed: 0, pedestrian: 0, vehicle: 0});
-    }
-    const z = zoneCounts.get(zone);
-    z.detections++;
-    z.totalSpeed += point.speed;
-    if (point.object_type === "pedestrian") z.pedestrian++;
-    else z.vehicle++;
-  }
-}
-
-const zoneStats = Array.from(zoneCounts.values())
-  .map((z) => ({
-    Zone: z.zone.replace(/_/g, " "),
-    Detections: z.detections,
-    "Avg Speed": +(z.totalSpeed / z.detections).toFixed(1),
-    "Pedestrian %": Math.round((z.pedestrian / z.detections) * 100),
-    "Vehicle %": Math.round((z.vehicle / z.detections) * 100),
-  }))
-  .sort((a, b) => b.Detections - a.Detections);
+const filteredMapTrips = preprocessTrips(filteredMapTracks, deckMap.timeMin);
 ```
 
 
@@ -191,7 +257,7 @@ display(<MetricCards summary={filteredSummary} />);
 ${typePills()}
 
 ```js
-const deckMap = createMovementMap({heatmap, tracks, mapboxToken: MAPBOX_TOKEN});
+const deckMap = createMovementMap({heatmap: mapHeatmap, tracks: mapTracks, mapboxToken: MAPBOX_TOKEN});
 ```
 
 ```js
@@ -205,7 +271,7 @@ const lightPreset = Generators.input(deckMap.lightPresetForm);
 
 ```js
 deckMap.overlay.setProps({
-  layers: deckMap.buildLayers({layerVisibility, currentTime, hexElevation, hexRadius, heatmap: filteredHeatmap, trips: filteredTrips})
+  layers: deckMap.buildLayers({layerVisibility, currentTime, hexElevation, hexRadius, heatmap: filteredMapHeatmap, trips: filteredMapTrips})
 });
 ```
 
@@ -256,7 +322,7 @@ const timelineStyle = Generators.input(timelineStyleInput);
 
 Detection frequency over time, binned in 5-minute intervals and stacked by object type. Hover over a bar for details.
 
-${resize((width) => timelineStyle === "Bar Chart" ? createActivityTimeline(filteredTracks, {width}) : createActivityArea(filteredTracks, {width}))}
+${resize((width) => timelineStyle === "Bar Chart" ? createActivityTimeline(filteredTimeline, {width}) : createActivityArea(filteredTimeline, {width}))}
 
 </div>
 </div>
@@ -268,7 +334,7 @@ ${resize((width) => timelineStyle === "Bar Chart" ? createActivityTimeline(filte
 
 Per-track average speed, grouped by object type. Each dot represents one track (grouped by track ID); the box plot shows the distribution (median, quartiles, whiskers). Hover for details.
 
-${resize((width) => createSpeedProfile(filteredTracks, {width}))}
+${resize((width) => createSpeedProfile(filteredSpeedProfile, {width}))}
 
 </div>
 <div class="card">
@@ -278,7 +344,7 @@ ${resize((width) => createSpeedProfile(filteredTracks, {width}))}
 Volume of detections by compass direction. Petal size represents count; purple shading shows pedestrian speed, orange shows vehicle speed (lighter = slower, darker = faster). Hover a petal for details.
 
 ```jsx
-display(<DirectionRose tracks={filteredTracks} />);
+display(<DirectionRose data={filteredDirectionRose} />);
 ```
 
 </div>
@@ -294,7 +360,7 @@ ${typePills()}
 Per-zone detection breakdown derived from track data. Shows detection volume, average speed, and pedestrian/vehicle composition for each monitored zone.
 
 ```js
-Inputs.table(zoneStats, {
+Inputs.table(filteredZoneStats, {
   columns: ["Zone", "Detections", "Avg Speed", "Pedestrian %", "Vehicle %"],
   width: {Zone: 180},
 })
@@ -306,40 +372,30 @@ Inputs.table(zoneStats, {
 ## Raw Data
 
 ```js
-const rawSourceInput = Inputs.radio(["Heatmap", "Track"], {value: "Heatmap", label: "Data source"});
+const rawSourceInput = Inputs.radio(["Heatmap", "Speed Profile"], {value: "Heatmap", label: "Data source"});
 const rawSourceFilter = Generators.input(rawSourceInput);
 ```
 
 ```js
-const rawHeatmap = heatmap
-  .filter(d => typeFilter === "All" || d.object_type === typeFilter.toLowerCase())
-  .map(d => ({
-    Source: "Heatmap",
-    Type: d.object_type,
-    Device: d.device_id,
-    Longitude: d.lon,
-    Latitude: d.lat,
-    "Point Count": d.point_count,
-    "Avg Speed": d.avg_speed,
-    "Max Speed": d.max_speed,
-    "First Seen": d.first_seen,
-    "Last Seen": d.last_seen,
-  }));
+const rawHeatmap = filteredHeatmap.map(d => ({
+  Type: d.object_type,
+  Device: d.device_id,
+  Longitude: d.lon,
+  Latitude: d.lat,
+  "Point Count": d.point_count,
+  "Avg Speed": d.avg_speed,
+  "Max Speed": d.max_speed,
+  "First Seen": d.first_seen,
+  "Last Seen": d.last_seen,
+}));
 
-const rawTracks = tracks
-  .filter(d => typeFilter === "All" || d.object_type === typeFilter.toLowerCase())
-  .map(d => ({
-    Source: "Track",
-    Type: d.object_type,
-    Device: d.device_id,
-    Longitude: d.longitude,
-    Latitude: d.latitude,
-    "Point Count": 1,
-    "Speed": d.speed,
-    "Timestamp": d.timestamp,
-  }));
+const rawSpeedProfile = filteredSpeedProfile.map(d => ({
+  Type: d.object_type,
+  "Track ID": d.track_id,
+  "Avg Speed (mph)": d.avg_speed,
+}));
 
-const rawData = rawSourceFilter === "Heatmap" ? rawHeatmap : rawTracks;
+const rawData = rawSourceFilter === "Heatmap" ? rawHeatmap : rawSpeedProfile;
 const rawSearch = Inputs.search(rawData, {placeholder: "Search raw data..."});
 const rawFiltered = Generators.input(rawSearch);
 ```
@@ -352,12 +408,12 @@ const rawFiltered = Generators.input(rawSearch);
 
 ```js
 const rawColumns = rawSourceFilter === "Heatmap"
-  ? ["Source", "Type", "Device", "Longitude", "Latitude", "Point Count", "Avg Speed", "Max Speed", "First Seen", "Last Seen"]
-  : ["Source", "Type", "Device", "Longitude", "Latitude", "Point Count", "Speed", "Timestamp"];
+  ? ["Type", "Device", "Longitude", "Latitude", "Point Count", "Avg Speed", "Max Speed", "First Seen", "Last Seen"]
+  : ["Type", "Track ID", "Avg Speed (mph)"];
 
 const rawWidths = rawSourceFilter === "Heatmap"
   ? {"First Seen": 140, "Last Seen": 140}
-  : {"Timestamp": 160};
+  : {"Track ID": 200};
 
 display(Inputs.table(rawFiltered, {
   columns: rawColumns,

@@ -5,6 +5,7 @@
 
 import * as Plot from "npm:@observablehq/plot";
 import * as htl from "npm:htl";
+import { formatDateTime } from "../utils/format.js";
 
 export interface TrackPoint {
   track_id: string;
@@ -30,6 +31,18 @@ export interface HeatmapCell {
   last_seen: string;
 }
 
+export interface TimelineBin {
+  bin_start: string;
+  object_type: string;
+  count: number;
+}
+
+export interface SpeedProfileRow {
+  track_id: string;
+  object_type: string;
+  avg_speed: number;
+}
+
 const TYPE_COLORS: Record<string, string> = {
   pedestrian: "#8b5cf6",
   vehicle: "#f59e0b",
@@ -39,16 +52,21 @@ const THEME = {
   style: { background: "transparent", color: "currentColor" },
 };
 
+const BIN_MS = 5 * 60 * 1000; // 5 minutes in milliseconds
+
 /**
  * Activity timeline — 5-minute binned bar chart, stacked by object_type.
+ * Accepts pre-binned TimelineBin[] data.
  */
 export function createActivityTimeline(
-  tracks: TrackPoint[],
+  bins: TimelineBin[],
   { width }: { width?: number } = {},
 ): SVGSVGElement | HTMLElement {
-  const data = tracks.map((d) => ({
-    ...d,
-    timestamp: new Date(d.timestamp),
+  const data = bins.map((d) => ({
+    bin_start: new Date(d.bin_start),
+    bin_end: new Date(new Date(d.bin_start).getTime() + BIN_MS),
+    object_type: d.object_type,
+    count: d.count,
   }));
 
   return Plot.plot({
@@ -65,20 +83,15 @@ export function createActivityTimeline(
       legend: true,
     },
     marks: [
-      Plot.rectY(
-        data,
-        {
-          ...Plot.binX(
-            { y: "count" },
-            {
-              x: "timestamp",
-              fill: "object_type",
-              interval: "5 minutes",
-            },
-          ),
-          tip: true,
-        },
-      ),
+      Plot.rectY(data, {
+        x1: "bin_start",
+        x2: "bin_end",
+        y: "count",
+        fill: "object_type",
+        title: (d: any) =>
+          `${formatDateTime(d.bin_start)}\n${d.object_type}: ${d.count.toLocaleString()} detections`,
+        tip: true,
+      }),
       Plot.ruleY([0]),
     ],
   });
@@ -86,23 +99,12 @@ export function createActivityTimeline(
 
 /**
  * Speed profile — dot strip + box plot of per-track average speed, grouped by object_type.
+ * Accepts pre-aggregated SpeedProfileRow[] data (one row per track).
  */
 export function createSpeedProfile(
-  tracks: TrackPoint[],
+  data: SpeedProfileRow[],
   { width }: { width?: number } = {},
 ): SVGSVGElement | HTMLElement {
-  // Group by track_id, compute avg speed per track
-  const trackMap = new Map<string, { type: string; speeds: number[] }>();
-  for (const t of tracks) {
-    if (!trackMap.has(t.track_id))
-      trackMap.set(t.track_id, { type: t.object_type, speeds: [] });
-    trackMap.get(t.track_id)!.speeds.push(t.speed);
-  }
-  const data = Array.from(trackMap, ([, v]) => ({
-    object_type: v.type,
-    avg_speed: v.speeds.reduce((a, b) => a + b, 0) / v.speeds.length,
-  }));
-
   return Plot.plot({
     ...THEME,
     width,
@@ -139,15 +141,18 @@ export function createSpeedProfile(
 
 /**
  * Activity area — gradient area chart variant of the activity timeline.
+ * Accepts pre-binned TimelineBin[] data.
  */
 export function createActivityArea(
-  tracks: TrackPoint[],
+  bins: TimelineBin[],
   { width }: { width?: number } = {},
 ): SVGSVGElement | HTMLElement {
-  const data = tracks.map((d) => ({
-    ...d,
-    timestamp: new Date(d.timestamp),
-  }));
+  const pedData = bins
+    .filter((d) => d.object_type === "pedestrian")
+    .map((d) => ({ bin_start: new Date(d.bin_start), count: d.count }));
+  const vehData = bins
+    .filter((d) => d.object_type === "vehicle")
+    .map((d) => ({ bin_start: new Date(d.bin_start), count: d.count }));
 
   return Plot.plot({
     ...THEME,
@@ -173,62 +178,38 @@ export function createActivityArea(
           <stop offset="100%" stop-color="${TYPE_COLORS.vehicle}" stop-opacity="0.05" />
         </linearGradient>
       </defs>`,
-      Plot.areaY(
-        data.filter((d) => d.object_type === "pedestrian"),
-        Plot.binX(
-          { y: "count" },
-          {
-            x: "timestamp",
-            fill: "url(#ped-grad)",
-            interval: "5 minutes",
-            curve: "basis",
-          },
-        ),
-      ),
-      Plot.areaY(
-        data.filter((d) => d.object_type === "vehicle"),
-        Plot.binX(
-          { y: "count" },
-          {
-            x: "timestamp",
-            fill: "url(#veh-grad)",
-            interval: "5 minutes",
-            curve: "basis",
-          },
-        ),
-      ),
-      Plot.lineY(
-        data.filter((d) => d.object_type === "pedestrian"),
-        {
-          ...Plot.binX(
-            { y: "count" },
-            {
-              x: "timestamp",
-              interval: "5 minutes",
-              curve: "basis",
-            },
-          ),
-          stroke: TYPE_COLORS.pedestrian,
-          strokeWidth: 2,
-          tip: true,
-        },
-      ),
-      Plot.lineY(
-        data.filter((d) => d.object_type === "vehicle"),
-        {
-          ...Plot.binX(
-            { y: "count" },
-            {
-              x: "timestamp",
-              interval: "5 minutes",
-              curve: "basis",
-            },
-          ),
-          stroke: TYPE_COLORS.vehicle,
-          strokeWidth: 2,
-          tip: true,
-        },
-      ),
+      Plot.areaY(pedData, {
+        x: "bin_start",
+        y: "count",
+        fill: "url(#ped-grad)",
+        curve: "basis",
+      }),
+      Plot.areaY(vehData, {
+        x: "bin_start",
+        y: "count",
+        fill: "url(#veh-grad)",
+        curve: "basis",
+      }),
+      Plot.lineY(pedData, {
+        x: "bin_start",
+        y: "count",
+        stroke: TYPE_COLORS.pedestrian,
+        strokeWidth: 2,
+        curve: "basis",
+        title: (d: any) =>
+          `${formatDateTime(d.bin_start)}\npedestrian: ${d.count.toLocaleString()} detections`,
+        tip: true,
+      }),
+      Plot.lineY(vehData, {
+        x: "bin_start",
+        y: "count",
+        stroke: TYPE_COLORS.vehicle,
+        strokeWidth: 2,
+        curve: "basis",
+        title: (d: any) =>
+          `${formatDateTime(d.bin_start)}\nvehicle: ${d.count.toLocaleString()} detections`,
+        tip: true,
+      }),
       Plot.ruleY([0]),
     ],
   });
