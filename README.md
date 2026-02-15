@@ -35,6 +35,7 @@ npm run dev            # http://localhost:3000
 │       └── format.ts               # Period formatting utilities
 ├── scripts/
 │   ├── promote-report.sh           # Build + upload to GCS
+│   ├── bundle-single-html.js       # Merge pages into standalone HTML
 │   └── generate-pdf.js             # Playwright PDF renderer
 ├── .github/workflows/
 │   └── promote-report.yml          # CI promotion via workflow_dispatch
@@ -82,11 +83,17 @@ The primary workflow is **develop, preview, promote**. Reports are developed loc
 Requires [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) — install via `brew install google-cloud-sdk`, then `gcloud auth login` to authenticate.
 
 ```bash
-# Build and upload
+# Build and upload standalone HTML
 npm run promote -- pip "2026-01-19T00:00:00Z" "2026-01-20T00:00:00Z"
 
 # With PDF generation
 npm run promote -- pip "2026-01-19T00:00:00Z" "2026-01-20T00:00:00Z" --pdf
+
+# Also upload full dist/ directory
+npm run promote -- pip "2026-01-19T00:00:00Z" "2026-01-20T00:00:00Z" --full-dist
+
+# All options
+npm run promote -- pip "2026-01-19T00:00:00Z" "2026-01-20T00:00:00Z" --pdf --full-dist
 ```
 
 ### What the promote script does
@@ -95,8 +102,10 @@ npm run promote -- pip "2026-01-19T00:00:00Z" "2026-01-20T00:00:00Z" --pdf
 2. Derives period slug from timestamps (e.g. `2026-01-19_to_2026-01-20`)
 3. Clears Observable cache (`npm run clean`)
 4. Builds the static site (`npm run build`)
-5. Uploads full `dist/` to GCS via `gsutil -m rsync`
-6. (Optional) Generates PDF with Playwright and uploads alongside HTML
+5. Bundles all three pages into a single standalone HTML via `bundle-single-html.js`
+6. Uploads `report-standalone.html` to GCS
+7. (Optional `--full-dist`) Uploads full `dist/` directory to GCS
+8. (Optional `--pdf`) Generates PDF with Playwright and uploads alongside HTML
 
 ### GCS path structure
 
@@ -104,18 +113,19 @@ npm run promote -- pip "2026-01-19T00:00:00Z" "2026-01-20T00:00:00Z" --pdf
 gs://rhevia-data-reports/
 └── {org_subdomain}/
     └── {start_date}_to_{end_date}/
-        ├── index.html
-        ├── {org_subdomain}/
-        │   ├── index.html
-        │   ├── movement-report.html
-        │   └── closing-remarks.html
-        ├── _observablehq/    # Framework assets
-        ├── _npm/             # Bundled dependencies
-        ├── _file/data/       # Baked JSON data
-        └── report.pdf        # (if --pdf)
+        ├── report-standalone.html   # Always present — single self-contained file
+        ├── report.pdf               # If --pdf
+        └── dist/                    # If --full-dist
+            ├── {org_subdomain}/
+            │   ├── index.html
+            │   ├── movement-report.html
+            │   └── closing-remarks.html
+            ├── _observablehq/
+            ├── _npm/
+            └── _file/data/
 ```
 
-Each promoted report is a self-contained snapshot. Published reports are immutable — changing the template does not change already-promoted reports.
+The standalone HTML bundles all three report pages, CSS, JS modules, and JSON data into a single file (~6 MB). Internet is needed only for Mapbox tile requests. Published reports are immutable — changing the template does not change already-promoted reports.
 
 ### CI promotion (GitHub Actions)
 
@@ -125,6 +135,7 @@ The `promote-report.yml` workflow is triggered manually from the Actions tab wit
 - `period_start` — ISO 8601 timestamp
 - `period_end` — ISO 8601 timestamp
 - `generate_pdf` — boolean (default false)
+- `upload_full_dist` — boolean (default false)
 
 Required repository secrets: `GCP_SA_KEY`, `MAPBOX_TOKEN`.
 
@@ -158,7 +169,8 @@ No changes to page templates or components are needed — the `[org_subdomain]` 
 | `npm run dev` | Start local preview server |
 | `npm run build` | Build static site to `./dist` |
 | `npm run clean` | Clear the Observable data loader cache |
-| `npm run promote -- <org> <start> <end> [--pdf]` | Build, upload to GCS, optionally generate PDF |
+| `npm run promote -- <org> <start> <end> [--pdf] [--full-dist]` | Build, bundle standalone HTML, upload to GCS |
+| `MAPBOX_TOKEN=pk.xxx node scripts/bundle-single-html.js --input-dir dist/<org> --output dist/report-standalone.html` | Merge pages into standalone HTML |
 | `node scripts/generate-pdf.js --org <slug>` | Generate PDF from an existing `dist/` build |
 | `npm run deploy` | Deploy to Observable cloud |
 | `npm run observable` | Run Observable CLI commands |
