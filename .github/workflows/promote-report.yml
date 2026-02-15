@@ -20,6 +20,11 @@ on:
         required: false
         type: boolean
         default: false
+      upload_full_dist:
+        description: "Also upload full dist/ directory"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   promote:
@@ -69,4 +74,5 @@ jobs:
             "${{ inputs.org_subdomain }}" \
             "${{ inputs.period_start }}" \
             "${{ inputs.period_end }}" \
-            ${{ inputs.generate_pdf && '--pdf' || '' }}
+            ${{ inputs.generate_pdf && '--pdf' || '' }} \
+            ${{ inputs.upload_full_dist && '--full-dist' || '' }}

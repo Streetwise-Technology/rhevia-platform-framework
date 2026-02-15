@@ -467,7 +467,12 @@ export function preprocessTrips(tracks: TrackPoint[]): Trip[] {
 // ── Factory ──────────────────────────────────────────────────────
 
 export function createMovementMap(data: MovementMapData): MovementMapHandle {
-  const { heatmap, tracks, mapboxToken } = data;
+  const { heatmap, tracks, mapboxToken: mapboxTokenProp } = data;
+  const mapboxToken =
+    mapboxTokenProp ||
+    (typeof window !== "undefined" && (window as any).__MAPBOX_TOKEN) ||
+    undefined;
+  if (!mapboxToken) throw new Error("No Mapbox token provided");
 
   // ── Compute geometry ───────────────────────────────────────────
 
