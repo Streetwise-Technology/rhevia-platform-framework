@@ -1,5 +1,6 @@
 import React from "npm:react";
 import * as d3 from "npm:d3";
+import { BRAND_COLORS } from "./theme.js";
 
 interface Summary {
   total_detections: number;
@@ -12,11 +13,6 @@ interface Summary {
   directions?: Record<string, number>;
 }
 
-const COLORS = {
-  pedestrian: "#8b5cf6",
-  vehicle: "#f59e0b",
-  accent: "#f472b6",
-};
 
 const cardStyle: React.CSSProperties = {
   borderRadius: 12,
@@ -26,6 +22,10 @@ const cardStyle: React.CSSProperties = {
   alignItems: "center",
   justifyContent: "center",
   gap: 6,
+  background: "rgba(15, 15, 30, 0.55)",
+  backdropFilter: "blur(16px)",
+  WebkitBackdropFilter: "blur(16px)",
+  border: "1px solid rgba(255, 255, 255, 0.08)",
 };
 
 const labelStyle: React.CSSProperties = {
@@ -53,12 +53,12 @@ function DonutCard({ summary }: { summary: Summary }) {
     {
       label: "Pedestrian",
       value: summary.composition.pedestrian_pct,
-      color: COLORS.pedestrian,
+      color: BRAND_COLORS.pedestrian,
     },
     {
       label: "Vehicle",
       value: summary.composition.vehicle_pct,
-      color: COLORS.vehicle,
+      color: BRAND_COLORS.vehicle,
     },
   ].filter((s) => s.value > 0);
 
@@ -123,7 +123,7 @@ function StatCard({
         }}
       />
       {unit && (
-        <p style={{ fontSize: 13, color: COLORS.accent, margin: 0 }}>{unit}</p>
+        <p style={{ fontSize: 13, color: BRAND_COLORS.accent, margin: 0 }}>{unit}</p>
       )}
       <p style={labelStyle}>{label}</p>
       {subtitle && (
@@ -171,7 +171,7 @@ function DirectionCard({ directions }: { directions: Record<string, number> }) {
               style={{
                 fontSize: 20,
                 fontWeight: 700,
-                color: COLORS.accent,
+                color: BRAND_COLORS.accent,
                 width: 24,
                 textAlign: "center",
               }}
@@ -209,14 +209,14 @@ export function MetricCards({ summary }: { summary: Summary }) {
           <>
             {summary.pedestrian_count > 0 && (
               <>
-                <span style={{ color: COLORS.pedestrian }}>●</span>{" "}
+                <span style={{ color: BRAND_COLORS.pedestrian }}>●</span>{" "}
                 {summary.pedestrian_count.toLocaleString()} pedestrians
               </>
             )}
             {summary.pedestrian_count > 0 && summary.vehicle_count > 0 && " · "}
             {summary.vehicle_count > 0 && (
               <>
-                <span style={{ color: COLORS.vehicle }}>●</span>{" "}
+                <span style={{ color: BRAND_COLORS.vehicle }}>●</span>{" "}
                 {summary.vehicle_count.toLocaleString()} vehicles
               </>
             )}

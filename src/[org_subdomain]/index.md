@@ -1,6 +1,5 @@
 ---
 title: Executive Summary
-theme: slate
 toc: false
 ---
 

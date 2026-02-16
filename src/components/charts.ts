@@ -3,9 +3,11 @@
 // Usage:
 //   import { createActivityTimeline, createActivityArea, createSpeedProfile } from "../components/charts.js";
 
+import * as d3 from "npm:d3";
 import * as Plot from "npm:@observablehq/plot";
 import * as htl from "npm:htl";
 import { formatDateTime } from "../utils/format.js";
+import { BRAND_COLORS } from "./theme.js";
 
 export interface TrackPoint {
   track_id: string;
@@ -43,11 +45,6 @@ export interface SpeedProfileRow {
   avg_speed: number;
 }
 
-const TYPE_COLORS: Record<string, string> = {
-  pedestrian: "#8b5cf6",
-  vehicle: "#f59e0b",
-};
-
 const THEME = {
   style: { background: "transparent", color: "currentColor" },
 };
@@ -79,7 +76,7 @@ export function createActivityTimeline(
     y: { label: "Detections", grid: true },
     color: {
       domain: ["pedestrian", "vehicle"],
-      range: [TYPE_COLORS.pedestrian, TYPE_COLORS.vehicle],
+      range: [BRAND_COLORS.pedestrian, BRAND_COLORS.vehicle],
       legend: true,
     },
     marks: [
@@ -105,6 +102,34 @@ export function createSpeedProfile(
   data: SpeedProfileRow[],
   { width }: { width?: number } = {},
 ): SVGSVGElement | HTMLElement {
+  // Pre-compute statistics per object_type for annotations
+  const stats = ["pedestrian", "vehicle"]
+    .map((type) => {
+      const speeds = data
+        .filter((d) => d.object_type === type)
+        .map((d) => d.avg_speed)
+        .sort(d3.ascending);
+      if (speeds.length === 0) return null;
+      return {
+        object_type: type,
+        min: d3.min(speeds)!,
+        q1: d3.quantile(speeds, 0.25)!,
+        median: d3.median(speeds)!,
+        q3: d3.quantile(speeds, 0.75)!,
+        max: d3.max(speeds)!,
+        count: speeds.length,
+      };
+    })
+    .filter(Boolean) as {
+    object_type: string;
+    min: number;
+    q1: number;
+    median: number;
+    q3: number;
+    max: number;
+    count: number;
+  }[];
+
   return Plot.plot({
     ...THEME,
     width,
@@ -115,7 +140,7 @@ export function createSpeedProfile(
     y: { label: null, padding: 0.5 },
     color: {
       domain: ["pedestrian", "vehicle"],
-      range: [TYPE_COLORS.pedestrian, TYPE_COLORS.vehicle],
+      range: [BRAND_COLORS.pedestrian, BRAND_COLORS.vehicle],
       legend: true,
     },
     marks: [
@@ -126,12 +151,18 @@ export function createSpeedProfile(
         fillOpacity: 0.3,
         r: 10,
         tip: true,
+        channels: {
+          "Speed (mph)": "avg_speed",
+          Type: "object_type",
+          Track: "track_id",
+        },
+        format: { x: false, y: false, fill: false },
       }),
       Plot.boxX(data, {
         x: "avg_speed",
         y: "object_type",
         fill: "object_type",
-        fillOpacity: 0.15,
+        fillOpacity: 0.2,
         stroke: "object_type",
         strokeWidth: 1.5,
       }),
@@ -164,18 +195,18 @@ export function createActivityArea(
     y: { label: "Detections", grid: true },
     color: {
       domain: ["pedestrian", "vehicle"],
-      range: [TYPE_COLORS.pedestrian, TYPE_COLORS.vehicle],
+      range: [BRAND_COLORS.pedestrian, BRAND_COLORS.vehicle],
       legend: true,
     },
     marks: [
       () => htl.svg`<defs>
         <linearGradient id="ped-grad" gradientTransform="rotate(90)">
-          <stop offset="5%" stop-color="${TYPE_COLORS.pedestrian}" stop-opacity="0.6" />
-          <stop offset="100%" stop-color="${TYPE_COLORS.pedestrian}" stop-opacity="0.05" />
+          <stop offset="5%" stop-color="${BRAND_COLORS.pedestrian}" stop-opacity="0.6" />
+          <stop offset="100%" stop-color="${BRAND_COLORS.pedestrian}" stop-opacity="0.05" />
         </linearGradient>
         <linearGradient id="veh-grad" gradientTransform="rotate(90)">
-          <stop offset="5%" stop-color="${TYPE_COLORS.vehicle}" stop-opacity="0.6" />
-          <stop offset="100%" stop-color="${TYPE_COLORS.vehicle}" stop-opacity="0.05" />
+          <stop offset="5%" stop-color="${BRAND_COLORS.vehicle}" stop-opacity="0.6" />
+          <stop offset="100%" stop-color="${BRAND_COLORS.vehicle}" stop-opacity="0.05" />
         </linearGradient>
       </defs>`,
       Plot.areaY(pedData, {
@@ -193,7 +224,7 @@ export function createActivityArea(
       Plot.lineY(pedData, {
         x: "bin_start",
         y: "count",
-        stroke: TYPE_COLORS.pedestrian,
+        stroke: BRAND_COLORS.pedestrian,
         strokeWidth: 2,
         curve: "basis",
         title: (d: any) =>
@@ -203,7 +234,7 @@ export function createActivityArea(
       Plot.lineY(vehData, {
         x: "bin_start",
         y: "count",
-        stroke: TYPE_COLORS.vehicle,
+        stroke: BRAND_COLORS.vehicle,
         strokeWidth: 2,
         curve: "basis",
         title: (d: any) =>

@@ -1,5 +1,6 @@
 import React from "npm:react";
 import * as d3 from "npm:d3";
+import { ROSE_COLOR_RANGES } from "./theme.js";
 
 export interface DirectionBin {
   label: string;
@@ -11,12 +12,6 @@ export interface DirectionBin {
   avgSpeed: number;
 }
 
-// Smoother 5-stop gradients for each type
-const COLOR_RANGES = {
-  pedestrian: ["#ede9fe", "#c4b5fd", "#8b5cf6", "#7c3aed", "#5b21b6"],
-  vehicle: ["#fef3c7", "#fcd34d", "#f59e0b", "#d97706", "#92400e"],
-  combined: ["#ffffb2", "#fecc5c", "#fd8d3c", "#f03b20", "#bd0026"],
-};
 
 function buildColorScale(colors: string[], domain: [number, number]) {
   const stops = colors.map(
@@ -73,14 +68,14 @@ export function DirectionRose({ data }: { data: DirectionBin[] }) {
       : [0, 1];
 
   const combinedColorScale = buildColorScale(
-    COLOR_RANGES.combined,
+    ROSE_COLOR_RANGES.combined,
     speedDomain,
   );
   const pedColorScale = buildColorScale(
-    COLOR_RANGES.pedestrian,
+    ROSE_COLOR_RANGES.pedestrian,
     pedSpeedDomain,
   );
-  const vehColorScale = buildColorScale(COLOR_RANGES.vehicle, vehSpeedDomain);
+  const vehColorScale = buildColorScale(ROSE_COLOR_RANGES.vehicle, vehSpeedDomain);
 
   const angleScale = d3
     .scaleBand<string>()
@@ -137,10 +132,10 @@ export function DirectionRose({ data }: { data: DirectionBin[] }) {
 
   // Pick active color range for the legend
   const activeColors = isCombined
-    ? COLOR_RANGES.combined
+    ? ROSE_COLOR_RANGES.combined
     : hasPed
-      ? COLOR_RANGES.pedestrian
-      : COLOR_RANGES.vehicle;
+      ? ROSE_COLOR_RANGES.pedestrian
+      : ROSE_COLOR_RANGES.vehicle;
   const activeLabel = isCombined
     ? "All Detections"
     : hasPed

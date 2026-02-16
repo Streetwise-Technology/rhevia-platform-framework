@@ -1,6 +1,5 @@
 ---
 title: Closing Remarks
-theme: slate
 ---
 
 ```js
