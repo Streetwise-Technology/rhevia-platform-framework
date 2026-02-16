@@ -35,6 +35,7 @@ node scripts/generate-pdf.js --org <slug>        # Generate PDF from existing di
 - `PERIOD_START`, `PERIOD_END` (required for build) — ISO 8601 timestamps
 - `ORG_SUBDOMAIN` (optional, defaults to `pip`) — determines which org to build
 - `BQ_PROJECT_ID` (optional, defaults to `studious-linker-467410-e9`) — BigQuery project ID. The dataset name (`BQ_DATASET`) is hardcoded in `_bq_helpers.py`
+- `BASE_PATH` (optional, defaults to `/`) — URL base path for GitHub Pages deployment (e.g. `/rhevia-platform-framework/`). Leave unset for local dev and GCS promotion
 
 ## Adding a new org
 
