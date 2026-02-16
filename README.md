@@ -155,6 +155,14 @@ gs://rhevia-data-reports/
 
 The standalone HTML bundles all three report pages, CSS, JS modules, and JSON data into a single file (~6 MB). Internet is needed only for Mapbox tile requests. Published reports are immutable — changing the template does not change already-promoted reports.
 
+### GitHub Pages (preview)
+
+The `deploy-pages.yml` workflow auto-deploys to GitHub Pages on every push to `main` (or via manual trigger). It builds with `BASE_PATH=/rhevia-platform-framework/` so asset paths resolve correctly on the project site.
+
+Live preview: `https://streetwise-technology.github.io/rhevia-platform-framework/pip/`
+
+> **Note:** GitHub Pages requires the Pages source to be set to **GitHub Actions** in repo settings (Settings → Pages → Source → GitHub Actions).
+
 ### CI promotion (GitHub Actions)
 
 The `promote-report.yml` workflow is triggered manually from the Actions tab with inputs:
@@ -178,6 +186,7 @@ Required repository secrets: `GCP_SA_KEY` (raw JSON content of a GCP service acc
 | `PERIOD_END` | Yes (for build) | Python data loaders | ISO 8601 period end timestamp |
 | `ORG_SUBDOMAIN` | No (defaults to `pip`) | `observablehq.config.js` | Organisation slug for routing |
 | `GOOGLE_APPLICATION_CREDENTIALS` | No (for promotion) | `gsutil`, BigQuery Python client | Path to GCP service account key JSON. Alternative to `gcloud auth login` |
+| `BASE_PATH` | No | `observablehq.config.js` | URL base path for GitHub Pages (e.g. `/rhevia-platform-framework/`). Leave unset for local dev and GCS |
 
 For local development, copy `.env.example` to `.env` and fill in values. In CI, secrets are configured in GitHub repo settings — `GCP_SA_KEY` (service account key JSON) and `MAPBOX_TOKEN`.
 
