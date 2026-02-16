@@ -1,10 +1,11 @@
-# heatmap.json.py — Fetch spatial grid for statistics and raw data table
+# map-heatmap.json.py — Fetch aggregated grid cells for Deck.GL HexagonLayer
 #
-# Used by the raw data table and statistics displays.
-# For the map (Deck.GL HexagonLayer), see map-heatmap.json.py instead.
+# This is the MAP version — lower precision, aggregated for Deck.GL performance.
+# Used exclusively by the HexagonLayer/ScatterplotLayer in deck-map.ts.
+# For full statistics data, see heatmap.json.py instead.
 #
 # Observable Framework invokes this as:
-#   python heatmap.json.py --org_subdomain=pip
+#   python map-heatmap.json.py --org_subdomain=pip
 
 import argparse
 import json
@@ -15,7 +16,7 @@ from _bq_helpers import get_bq_client, get_table_fqn, map_object_type, run_query
 
 # ── Configurable defaults ─────────────────────────────────────────
 PRECISION = 5  # Decimal places for coordinate rounding (≈1m grid cells)
-MIN_POINTS = 1  # Minimum distinct tracks per cell (1 = no filtering)
+MIN_POINTS = 1  # Minimum distinct tracks per cell to include
 # ──────────────────────────────────────────────────────────────────
 
 parser = argparse.ArgumentParser()
@@ -25,7 +26,7 @@ args = parser.parse_args()
 PERIOD_START = os.environ.get("PERIOD_START", "2026-01-19T00:00:00")
 PERIOD_END = os.environ.get("PERIOD_END", "2026-01-19T23:59:59")
 
-print(f"Loading heatmap (stats) for {args.org_subdomain}", file=sys.stderr)
+print(f"Loading map heatmap for {args.org_subdomain}", file=sys.stderr)
 
 try:
     client = get_bq_client()
@@ -67,9 +68,9 @@ try:
             }
         )
 
-    print(f"Loaded {len(data)} heatmap cells (stats)", file=sys.stderr)
+    print(f"Loaded {len(data)} map heatmap cells", file=sys.stderr)
     print(json.dumps(data))
 
 except Exception as e:
-    print(f"Error loading heatmap for {args.org_subdomain}: {e}", file=sys.stderr)
+    print(f"Error loading map heatmap for {args.org_subdomain}: {e}", file=sys.stderr)
     sys.exit(1)

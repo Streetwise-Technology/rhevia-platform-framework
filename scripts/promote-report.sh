@@ -1,33 +1,47 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Load .env if present (CI injects env vars directly)
+if [[ -f .env ]]; then
+  set -a
+  source .env
+  set +a
+fi
+
 # promote-report.sh — Build a report and upload to GCS as an immutable snapshot.
 #
 # Usage:
-#   ./scripts/promote-report.sh <ORG_SUBDOMAIN> <PERIOD_START> <PERIOD_END> [--pdf]
+#   ./scripts/promote-report.sh <ORG_SUBDOMAIN> <PERIOD_START> <PERIOD_END> [--pdf] [--full-dist]
 #
 # Examples:
 #   ./scripts/promote-report.sh pip "2026-01-19T00:00:00Z" "2026-01-20T00:00:00Z"
 #   ./scripts/promote-report.sh pip "2026-01-19T00:00:00Z" "2026-01-20T00:00:00Z" --pdf
+#   ./scripts/promote-report.sh pip "2026-01-19T00:00:00Z" "2026-01-20T00:00:00Z" --full-dist
 
-GCS_BUCKET="gs://rhevia-movement-intelligence-reports"
+GCS_BUCKET="gs://rhevia-data-reports"
 
 # --- Parse arguments --------------------------------------------------------
 
 GENERATE_PDF=false
+UPLOAD_FULL_DIST=false
 
 if [[ $# -lt 3 ]]; then
-  echo "Usage: $0 <ORG_SUBDOMAIN> <PERIOD_START> <PERIOD_END> [--pdf]" >&2
+  echo "Usage: $0 <ORG_SUBDOMAIN> <PERIOD_START> <PERIOD_END> [--pdf] [--full-dist]" >&2
   exit 1
 fi
 
 ORG_SUBDOMAIN="$1"
 PERIOD_START="$2"
 PERIOD_END="$3"
+shift 3
 
-if [[ "${4:-}" == "--pdf" ]]; then
-  GENERATE_PDF=true
-fi
+for arg in "$@"; do
+  case "$arg" in
+    --pdf) GENERATE_PDF=true ;;
+    --full-dist) UPLOAD_FULL_DIST=true ;;
+    *) echo "Unknown option: $arg" >&2; exit 1 ;;
+  esac
+done
 
 # --- Validate environment ---------------------------------------------------
 
@@ -65,10 +79,24 @@ npm run clean
 echo "Building report..."
 npm run build
 
+# --- Bundle standalone HTML --------------------------------------------------
+
+echo "Bundling standalone HTML..."
+MAPBOX_TOKEN="${MAPBOX_TOKEN}" node scripts/bundle-single-html.js \
+  --input-dir "dist/${ORG_SUBDOMAIN}" \
+  --output "dist/report-standalone.html"
+
 # --- Upload to GCS ----------------------------------------------------------
 
 echo "Uploading to ${DEST}/..."
-gsutil -m rsync -r dist/ "${DEST}/"
+gsutil cp dist/report-standalone.html "${DEST}/report-standalone.html"
+
+# --- Optional full dist upload ----------------------------------------------
+
+if [[ "$UPLOAD_FULL_DIST" == "true" ]]; then
+  echo "Uploading full dist/ to ${DEST}/dist/..."
+  gsutil -m rsync -r "dist/" "${DEST}/dist/"
+fi
 
 # --- Optional PDF generation ------------------------------------------------
 

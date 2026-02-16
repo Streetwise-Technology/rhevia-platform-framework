@@ -30,3 +30,17 @@ export function formatPeriod(start: string, end: string): string {
   }
   return `Period: ${sDate}, ${sTime} — ${eDate}, ${eTime}`;
 }
+
+/**
+ * Format a Date as "19 Feb, 2026. 07:10am"
+ */
+export function formatDateTime(d: Date): string {
+  const day = d.getDate();
+  const month = d.toLocaleString("en-GB", { month: "short" });
+  const year = d.getFullYear();
+  const hours = d.getHours();
+  const minutes = d.getMinutes().toString().padStart(2, "0");
+  const ampm = hours >= 12 ? "pm" : "am";
+  const h12 = hours % 12 || 12;
+  return `${day} ${month}, ${year}. ${h12}:${minutes}${ampm}`;
+}
