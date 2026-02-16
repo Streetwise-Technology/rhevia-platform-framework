@@ -5,10 +5,13 @@ Multi-tenant movement intelligence reporting platform built on [Observable Frame
 ## Quick start
 
 ```bash
-cp .env.example .env   # then fill in MAPBOX_TOKEN
+cp .env.example .env              # then fill in required values
 npm install
-npm run dev            # http://localhost:3000
+pip install -r requirements.txt   # Python data loaders (BigQuery)
+npm run dev                       # http://localhost:3000
 ```
+
+> GCP authentication is only needed for promoting reports — see [Promoting reports](#promoting-reports).
 
 ## Project structure
 
@@ -37,6 +40,8 @@ npm run dev            # http://localhost:3000
 │   ├── promote-report.sh           # Build + upload to GCS
 │   ├── bundle-single-html.js       # Merge pages into standalone HTML
 │   └── generate-pdf.js             # Playwright PDF renderer
+├── .keys/                             # GCP service account key (gitignored)
+│   └── sa-key.json
 ├── .github/workflows/
 │   └── promote-report.yml          # CI promotion via workflow_dispatch
 ├── observablehq.config.js          # Framework config (env-driven routing)
@@ -80,7 +85,30 @@ The primary workflow is **develop, preview, promote**. Reports are developed loc
 
 ### Local promotion
 
-Requires [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) — install via `brew install google-cloud-sdk`, then `gcloud auth login` to authenticate.
+GCP authentication is required for BigQuery (data loaders) and GCS (upload). Two options:
+
+#### Option A — Service account key (recommended for automation)
+
+1. Download a service account key JSON from the [GCP console](https://console.cloud.google.com/iam-admin/serviceaccounts) (Keys tab → Add Key → JSON)
+2. Save it to `.keys/sa-key.json` (this directory is gitignored)
+3. Set the path in `.env`:
+
+```bash
+GOOGLE_APPLICATION_CREDENTIALS=.keys/sa-key.json
+```
+
+This authenticates both `gsutil` and BigQuery in a single step. The promote script sources `.env` automatically.
+
+#### Option B — Interactive CLI login
+
+Install the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) (`brew install google-cloud-sdk`), then run **both** commands:
+
+```bash
+gcloud auth login                          # authenticates gsutil
+gcloud auth application-default login      # authenticates BigQuery Python client (ADC)
+```
+
+Then promote:
 
 ```bash
 # Build and upload standalone HTML
@@ -137,7 +165,9 @@ The `promote-report.yml` workflow is triggered manually from the Actions tab wit
 - `generate_pdf` — boolean (default false)
 - `upload_full_dist` — boolean (default false)
 
-Required repository secrets: `GCP_SA_KEY`, `MAPBOX_TOKEN`.
+Required repository secrets: `GCP_SA_KEY` (raw JSON content of a GCP service account key), `MAPBOX_TOKEN`.
+
+> In CI, `google-github-actions/auth@v2` takes the `GCP_SA_KEY` JSON content, writes it to a temp file, and sets `GOOGLE_APPLICATION_CREDENTIALS` to that path — so the promote script works identically in both environments.
 
 ## Environment variables
 
@@ -147,8 +177,9 @@ Required repository secrets: `GCP_SA_KEY`, `MAPBOX_TOKEN`.
 | `PERIOD_START` | Yes (for build) | Python data loaders | ISO 8601 period start timestamp |
 | `PERIOD_END` | Yes (for build) | Python data loaders | ISO 8601 period end timestamp |
 | `ORG_SUBDOMAIN` | No (defaults to `pip`) | `observablehq.config.js` | Organisation slug for routing |
+| `GOOGLE_APPLICATION_CREDENTIALS` | No (for promotion) | `gsutil`, BigQuery Python client | Path to GCP service account key JSON. Alternative to `gcloud auth login` |
 
-For local development, copy `.env.example` to `.env` and fill in values. In CI, `MAPBOX_TOKEN` and `GCP_SA_KEY` are set as GitHub repository secrets.
+For local development, copy `.env.example` to `.env` and fill in values. In CI, secrets are configured in GitHub repo settings — `GCP_SA_KEY` (service account key JSON) and `MAPBOX_TOKEN`.
 
 Note: `.env` variables are available to data loaders via `process.env` (Node.js) and `os.environ` (Python), but **not** to client-side pages. Use a data loader as a bridge (see `mapbox-token.json.js`).
 

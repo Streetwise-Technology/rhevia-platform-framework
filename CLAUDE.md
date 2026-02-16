@@ -44,6 +44,6 @@ node scripts/generate-pdf.js --org <slug>        # Generate PDF from existing di
 
 ## Promotion pipeline
 
-Local promotion requires the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) (`gcloud auth login` to authenticate, which provides `gsutil`).
+Local promotion requires GCP authentication. Authenticate via `GOOGLE_APPLICATION_CREDENTIALS=.keys/sa-key.json` in `.env` (recommended — `.keys/` is gitignored), or interactively via `gcloud auth login` + `gcloud auth application-default login`. The [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) provides `gsutil` for GCS uploads.
 
 Reports are promoted via `scripts/promote-report.sh` (locally or via GitHub Actions `promote-report.yml` workflow_dispatch). The promote script builds the site, then bundles all three pages (Executive Summary, Movement Report, Closing Remarks) into a single standalone HTML file via `scripts/bundle-single-html.js`. The standalone file is uploaded to `gs://rhevia-data-reports/{org}/{period}/`. Optionally, `--full-dist` also uploads the raw `dist/` directory. GCS is the source of truth — no Firestore.
