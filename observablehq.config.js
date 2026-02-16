@@ -6,8 +6,10 @@ const ORG_NAMES = {
 
 const org = process.env.ORG_SUBDOMAIN || "pip";
 const orgDisplayName = ORG_NAMES[org] || org;
+const basePath = process.env.BASE_PATH || "/";
 
 export default {
+  base: basePath,
   // Content to add to the head of the page, e.g. for a favicon:
   head: '<link rel="icon" href="observable.png" type="image/png" sizes="32x32"><link rel="stylesheet" href="print.css">',
   title: "Rhevia",
