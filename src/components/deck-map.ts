@@ -4,24 +4,22 @@
 //   import {createMovementMap} from "../components/deck-map.js";
 //   const deckMap = createMovementMap({heatmap, tracks, mapboxToken});
 
-import type { HeatmapCell, TrackPoint } from "./charts.js";
+import type { HeatmapCell, TrackPoint, TimelineBin } from "./charts.js";
+import {
+  BRAND_COLORS,
+  PEDESTRIAN_RGB,
+  VEHICLE_RGB,
+  HEX_COLOR_RANGES,
+  ZONE_FILL_COLOR,
+  ZONE_LINE_COLOR,
+  SUBZONE_FILL_COLOR,
+  SUBZONE_LINE_COLOR,
+} from "./theme.js";
 import * as d3 from "npm:d3";
 import deck from "npm:deck.gl";
 import mapboxgl from "npm:mapbox-gl";
 
 const { MapboxOverlay, TripsLayer } = deck;
-
-// ── Constants ────────────────────────────────────────────────────
-
-const PEDESTRIAN_COLOR = [139, 92, 246]; // #8b5cf6 purple
-const VEHICLE_COLOR = [245, 158, 11]; // #f59e0b amber
-const COLOR_RANGE = [
-  [255, 255, 178],
-  [254, 204, 92],
-  [253, 141, 60],
-  [240, 59, 32],
-  [189, 0, 38],
-];
 
 const MAP_STYLES = new Map([
   ["Standard", "mapbox://styles/mapbox/standard"],
@@ -35,10 +33,28 @@ const DEFAULT_LIGHT_PRESET: LightPreset = "dusk";
 
 // ── Types ────────────────────────────────────────────────────────
 
+interface ZoneFeature {
+  type: "Feature";
+  geometry: any;
+  properties: {
+    feature_id: string;
+    feature_name: string;
+    feature_type: string;
+    metadata: Record<string, any>;
+  };
+}
+
+export interface ZoneFeatureCollection {
+  type: "FeatureCollection";
+  features: ZoneFeature[];
+}
+
 export interface MovementMapData {
   heatmap: HeatmapCell[];
   tracks: TrackPoint[];
   mapboxToken: string;
+  zones?: ZoneFeatureCollection;
+  timeline?: TimelineBin[];
 }
 
 export interface MovementMapHandle {
@@ -54,6 +70,8 @@ export interface MovementMapHandle {
   lightPillsContainer: HTMLDivElement;
   currentStyle: string;
   timeMin: number;
+  timeRange: number;
+  updateHistogram(bins: TimelineBin[], typeFilter: string): void;
   buildLayers(opts: {
     layerVisibility: string[];
     currentTime: number;
@@ -61,7 +79,109 @@ export interface MovementMapHandle {
     hexRadius: number;
     heatmap?: HeatmapCell[];
     trips?: Trip[];
+    typeFilter?: string;
   }): unknown[];
+}
+
+// ── Histogram ────────────────────────────────────────────────────
+
+const HISTOGRAM_HEIGHT = 28;
+
+function drawHistogram(
+  canvas: HTMLCanvasElement,
+  bins: TimelineBin[],
+  timeMin: number,
+  timeRange: number,
+  typeFilter: string,
+): void {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const cssWidth = canvas.clientWidth;
+  const cssHeight = HISTOGRAM_HEIGHT;
+
+  canvas.width = cssWidth * dpr;
+  canvas.height = cssHeight * dpr;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+  if (bins.length === 0 || timeRange <= 0 || cssWidth <= 0) return;
+
+  const numColumns = Math.max(1, Math.floor(cssWidth / 3));
+  const colDuration = timeRange / numColumns;
+
+  const pedCounts = new Float64Array(numColumns);
+  const vehCounts = new Float64Array(numColumns);
+
+  for (const bin of bins) {
+    const binTime = new Date(bin.bin_start).getTime() - timeMin;
+    const colIdx = Math.floor(binTime / colDuration);
+    if (colIdx < 0 || colIdx >= numColumns) continue;
+    if (bin.object_type === "pedestrian") {
+      pedCounts[colIdx] += bin.count;
+    } else {
+      vehCounts[colIdx] += bin.count;
+    }
+  }
+
+  let maxCount = 0;
+  for (let i = 0; i < numColumns; i++) {
+    const total = pedCounts[i] + vehCounts[i];
+    if (total > maxCount) maxCount = total;
+  }
+  if (maxCount === 0) return;
+
+  const barWidth = Math.max(1, cssWidth / numColumns - 1);
+  const barGap = Math.max(0, cssWidth / numColumns - barWidth);
+
+  // Determine stacking order for "All" — minority type on top so it's visible
+  let totalPed = 0,
+    totalVeh = 0;
+  for (let j = 0; j < numColumns; j++) {
+    totalPed += pedCounts[j];
+    totalVeh += vehCounts[j];
+  }
+  const pedOnTop = totalPed <= totalVeh;
+
+  for (let i = 0; i < numColumns; i++) {
+    const x = i * (barWidth + barGap);
+    const pedH = (pedCounts[i] / maxCount) * cssHeight;
+    const vehH = (vehCounts[i] / maxCount) * cssHeight;
+
+    if (typeFilter === "All") {
+      const bottomH = pedOnTop ? vehH : pedH;
+      const topH = pedOnTop ? pedH : vehH;
+      if (bottomH > 0) {
+        ctx.fillStyle = pedOnTop
+          ? BRAND_COLORS.vehicle
+          : BRAND_COLORS.pedestrian;
+        ctx.fillRect(x, cssHeight - bottomH, barWidth, bottomH);
+      }
+      if (topH > 0) {
+        const visibleTopH = Math.max(2, topH);
+        ctx.fillStyle = pedOnTop
+          ? BRAND_COLORS.pedestrian
+          : BRAND_COLORS.vehicle;
+        ctx.fillRect(
+          x,
+          cssHeight - bottomH - visibleTopH,
+          barWidth,
+          visibleTopH,
+        );
+      }
+    } else if (typeFilter === "Pedestrian") {
+      if (pedH > 0) {
+        ctx.fillStyle = BRAND_COLORS.pedestrian;
+        ctx.fillRect(x, cssHeight - pedH, barWidth, pedH);
+      }
+    } else {
+      if (vehH > 0) {
+        ctx.fillStyle = BRAND_COLORS.vehicle;
+        ctx.fillRect(x, cssHeight - vehH, barWidth, vehH);
+      }
+    }
+  }
 }
 
 // ── Scrubber ─────────────────────────────────────────────────────
@@ -75,7 +195,10 @@ function createScrubber(
     loop = true,
     autoplay = false,
     format = String,
-    speeds = [1, 10, 30, 60],
+    speeds = [0.5, 1, 10, 30, 60],
+    timeMin = 0,
+    timeline = [] as TimelineBin[],
+    typeFilter = "All",
   }: {
     step?: number;
     delay?: number;
@@ -83,8 +206,14 @@ function createScrubber(
     autoplay?: boolean;
     format?: (v: number) => string;
     speeds?: number[];
+    timeMin?: number;
+    timeline?: TimelineBin[];
+    typeFilter?: string;
   } = {},
-): HTMLFormElement {
+): {
+  form: HTMLFormElement;
+  updateHistogram: (bins: TimelineBin[], typeFilter: string) => void;
+} {
   const form = document.createElement("form");
   Object.assign(form.style, {
     display: "flex",
@@ -93,6 +222,34 @@ function createScrubber(
     font: "13px var(--sans-serif)",
   });
 
+  // Histogram row — aligned with slider via matching spacers
+  const histogramRow = document.createElement("div");
+  Object.assign(histogramRow.style, {
+    display: "flex",
+    alignItems: "flex-end",
+    gap: "8px",
+  });
+
+  const histLeftSpacer = document.createElement("div");
+  Object.assign(histLeftSpacer.style, { width: "32px", flexShrink: "0" });
+
+  const histCanvas = document.createElement("canvas");
+  Object.assign(histCanvas.style, {
+    flex: "1",
+    height: `${HISTOGRAM_HEIGHT}px`,
+    display: "block",
+    borderRadius: "2px",
+  });
+
+  const histRightSpacer = document.createElement("div");
+  Object.assign(histRightSpacer.style, { minWidth: "90px", flexShrink: "0" });
+
+  histogramRow.appendChild(histLeftSpacer);
+  histogramRow.appendChild(histCanvas);
+  histogramRow.appendChild(histRightSpacer);
+  form.appendChild(histogramRow);
+
+  // Playback row
   const playbackRow = document.createElement("div");
   Object.assign(playbackRow.style, {
     display: "flex",
@@ -136,7 +293,7 @@ function createScrubber(
   Object.assign(speedGroup.style, {
     display: "flex",
     gap: "2px",
-    justifyContent: "flex-end",
+    justifyContent: "flex-start",
   });
 
   const SPEEDS = speeds;
@@ -172,8 +329,50 @@ function createScrubber(
   playbackRow.appendChild(slider);
   playbackRow.appendChild(output);
   form.appendChild(playbackRow);
+
+  // Start / end time labels below the slider
+  const timeRangeRow = document.createElement("div");
+  Object.assign(timeRangeRow.style, {
+    display: "flex",
+    justifyContent: "space-between",
+    fontSize: "11px",
+    color: "#9ca3af",
+    paddingLeft: "40px",
+  });
+  const startLabel = document.createElement("span");
+  startLabel.textContent = format(min);
+  const endLabel = document.createElement("span");
+  endLabel.textContent = format(max);
+  timeRangeRow.appendChild(startLabel);
+  timeRangeRow.appendChild(endLabel);
+  form.appendChild(timeRangeRow);
+
   form.appendChild(speedGroup);
 
+  // Histogram drawing state
+  let currentBins = timeline;
+  let currentTypeFilter = typeFilter;
+  const timeRange = max - min;
+
+  function redrawHistogram() {
+    drawHistogram(
+      histCanvas,
+      currentBins,
+      timeMin,
+      timeRange,
+      currentTypeFilter,
+    );
+  }
+
+  new ResizeObserver(() => redrawHistogram()).observe(histCanvas);
+
+  function updateHistogram(bins: TimelineBin[], tf: string) {
+    currentBins = bins;
+    currentTypeFilter = tf;
+    redrawHistogram();
+  }
+
+  // Playback logic
   let timer: ReturnType<typeof setInterval> | null = null;
   let value = min;
 
@@ -221,7 +420,7 @@ function createScrubber(
   (form as any).value = value;
   if (autoplay) btn.click();
 
-  return form;
+  return { form, updateHistogram };
 }
 
 // ── Hex Slider ──────────────────────────────────────────────────
@@ -445,9 +644,13 @@ export interface Trip {
   objectType: string;
   coordinates: [number, number][];
   timestamps: number[];
+  speeds: number[];
 }
 
-export function preprocessTrips(tracks: TrackPoint[], timeOffset: number = 0): Trip[] {
+export function preprocessTrips(
+  tracks: TrackPoint[],
+  timeOffset: number = 0,
+): Trip[] {
   const trackGroups = d3.group(tracks, (d: TrackPoint) => d.track_id);
   return Array.from(trackGroups, ([trackId, points]) => {
     const sorted = [...points].sort(
@@ -460,15 +663,82 @@ export function preprocessTrips(tracks: TrackPoint[], timeOffset: number = 0): T
       coordinates: sorted.map(
         (p) => [p.longitude, p.latitude] as [number, number],
       ),
-      timestamps: sorted.map((p) => new Date(p.timestamp).getTime() - timeOffset),
+      timestamps: sorted.map(
+        (p) => new Date(p.timestamp).getTime() - timeOffset,
+      ),
+      speeds: sorted.map((p) => p.speed ?? 0),
     };
   });
+}
+
+// ── Trip head interpolation ──────────────────────────────────────
+
+interface TripHeadDatum {
+  position: [number, number];
+  trackId: string;
+  objectType: string;
+  speed: number;
+  color: [number, number, number];
+}
+
+function interpolateTripHeads(
+  trips: Trip[],
+  currentTime: number,
+  layerVisible: boolean,
+): TripHeadDatum[] {
+  if (!layerVisible) return [];
+  const heads: TripHeadDatum[] = [];
+
+  for (const trip of trips) {
+    const ts = trip.timestamps;
+    const len = ts.length;
+    if (len === 0) continue;
+    if (currentTime < ts[0] || currentTime > ts[len - 1]) continue;
+
+    // Binary search: find rightmost index where ts[i] <= currentTime
+    let lo = 0;
+    let hi = len - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (ts[mid] <= currentTime) lo = mid;
+      else hi = mid - 1;
+    }
+    const i = lo;
+    const color =
+      trip.objectType === "pedestrian" ? PEDESTRIAN_RGB : VEHICLE_RGB;
+
+    if (i >= len - 1 || ts[i] === currentTime) {
+      heads.push({
+        position: trip.coordinates[i],
+        trackId: trip.trackId,
+        objectType: trip.objectType,
+        speed: trip.speeds[i],
+        color,
+      });
+      continue;
+    }
+
+    // Linear interpolation between points i and i+1
+    const frac = (currentTime - ts[i]) / (ts[i + 1] - ts[i]);
+    const [lon0, lat0] = trip.coordinates[i];
+    const [lon1, lat1] = trip.coordinates[i + 1];
+
+    heads.push({
+      position: [lon0 + (lon1 - lon0) * frac, lat0 + (lat1 - lat0) * frac],
+      trackId: trip.trackId,
+      objectType: trip.objectType,
+      speed: trip.speeds[i] + (trip.speeds[i + 1] - trip.speeds[i]) * frac,
+      color,
+    });
+  }
+
+  return heads;
 }
 
 // ── Factory ──────────────────────────────────────────────────────
 
 export function createMovementMap(data: MovementMapData): MovementMapHandle {
-  const { heatmap, tracks, mapboxToken: mapboxTokenProp } = data;
+  const { heatmap, tracks, mapboxToken: mapboxTokenProp, zones } = data;
   const mapboxToken =
     mapboxTokenProp ||
     (typeof window !== "undefined" && (window as any).__MAPBOX_TOKEN) ||
@@ -493,12 +763,25 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
 
   const trips = preprocessTrips(tracks, timeMin);
 
+  // ── Zone data ───────────────────────────────────────────────────
+
+  const hasZones = !!(zones && zones.features && zones.features.length > 0);
+  const zonePolygons = hasZones
+    ? zones!.features.filter((f) => f.properties.feature_type === "zone")
+    : [];
+  const subZonePolygons = hasZones
+    ? zones!.features.filter((f) => f.properties.feature_type === "subzone")
+    : [];
+
   // ── Create Observable Inputs ───────────────────────────────────
 
-  const layerCheckbox = createMultiSelectPills(
-    ["Density Hexagons", "Track Playback", "Detection Points"],
-    { value: [], label: "Layers" },
-  );
+  const layerOptions = ["Density Hexagons", "Track Playback"];
+  if (hasZones) layerOptions.push("Zones");
+
+  const layerCheckbox = createMultiSelectPills(layerOptions, {
+    value: hasZones ? ["Zones"] : [],
+    label: "Layers",
+  });
 
   const hexSlider = createLabeledSlider("Hexagon height", 0, 10, {
     step: 0.2,
@@ -506,14 +789,14 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
   });
   const hexWidthSlider = createLabeledSlider("Hexagon width", 5, 50, {
     step: 5,
-    value: 15,
+    value: 10,
   });
 
   const styleRadio = createSingleSelectPills(MAP_STYLES, {
     value: "mapbox://styles/mapbox/standard",
   });
 
-  const scrubberForm = createScrubber(0, timeRange, {
+  const { form: scrubberForm, updateHistogram } = createScrubber(0, timeRange, {
     step: 5000,
     delay: 50,
     loop: true,
@@ -524,6 +807,8 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
         minute: "2-digit",
         second: "2-digit",
       }),
+    timeMin,
+    timeline: data.timeline ?? [],
   });
 
   // ── Layer ↔ controls coupling ────────────────────────────────
@@ -553,8 +838,9 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
     left: "12px",
     zIndex: "10",
     pointerEvents: "auto",
-    background: "rgba(15, 15, 30, 0.88)",
-    backdropFilter: "blur(8px)",
+    background: "rgba(15, 15, 30, 0.55)",
+    backdropFilter: "blur(16px)",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
     borderRadius: "10px",
     padding: "14px 18px",
     display: "flex",
@@ -635,8 +921,9 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
     right: "52px",
     zIndex: "10",
     pointerEvents: "auto",
-    background: "rgba(15, 15, 30, 0.88)",
-    backdropFilter: "blur(8px)",
+    background: "rgba(15, 15, 30, 0.55)",
+    backdropFilter: "blur(16px)",
+    border: "1px solid rgba(255, 255, 255, 0.08)",
     borderRadius: "999px",
     boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
   });
@@ -650,6 +937,7 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
     container: mapContainer,
     style: "mapbox://styles/mapbox/standard",
     accessToken: mapboxToken,
+    attributionControl: false,
     pitch: 50,
     bearing: -20,
     config: {
@@ -659,9 +947,63 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
     },
   });
 
-  const overlay = new MapboxOverlay({ layers: [] });
+  const overlay = new MapboxOverlay({
+    layers: [],
+    getTooltip: ({ object, layer }: any) => {
+      if (!object || !layer) return null;
+      const tooltipStyle = {
+        background: "rgba(15,15,30,0.92)",
+        color: "#e0e0e0",
+        fontSize: "12px",
+        borderRadius: "6px",
+        padding: "8px 12px",
+      };
+      if (layer.id === "hexagon") {
+        const totalWeight = Math.round(
+          object.colorValue ?? object.elevationValue ?? 0,
+        );
+        const count = object.count ?? object.points?.length ?? 0;
+        return {
+          html: `<b>${totalWeight.toLocaleString()}</b> detections<br>${count} cell${count !== 1 ? "s" : ""} aggregated`,
+          style: tooltipStyle,
+        };
+      }
+      if (
+        (layer.id === "zones" || layer.id === "sub-zones") &&
+        object.properties
+      ) {
+        const props = object.properties;
+        const name = props.feature_name
+          .replace(/_/g, " ")
+          .replace(/\b\w/g, (c: string) => c.toUpperCase());
+        const lines = [name];
+        if (props.metadata && typeof props.metadata === "object") {
+          for (const [k, v] of Object.entries(props.metadata)) {
+            if (v != null) lines.push(`${k}: ${v}`);
+          }
+        }
+        return { html: lines.join("<br>"), style: tooltipStyle };
+      }
+      if (layer.id === "trip-heads") {
+        const d = object as TripHeadDatum;
+        const typeLabel =
+          d.objectType === "pedestrian" ? "Pedestrian" : "Vehicle";
+        const speedStr = d.speed > 0 ? `${d.speed.toFixed(1)} mph` : "N/A";
+        return {
+          html: `<b>${typeLabel}</b><br>Track: ${d.trackId}<br>Speed: ${speedStr}`,
+          style: tooltipStyle,
+        };
+      }
+      return null;
+    },
+  });
   map.addControl(overlay);
   map.addControl(new mapboxgl.NavigationControl());
+  map.addControl(
+    new mapboxgl.AttributionControl({ compact: true }),
+    "bottom-right",
+  );
+  map.addControl(new mapboxgl.ScaleControl({ unit: "metric" }), "bottom");
 
   map.on("load", () => {
     map.fitBounds(
@@ -671,6 +1013,14 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
       ],
       { padding: 40, pitch: 50, bearing: -20 },
     );
+
+    const scaleEl = mapContainer.querySelector(
+      ".mapboxgl-ctrl-scale",
+    ) as HTMLElement | null;
+    if (scaleEl) {
+      scaleEl.style.borderRadius = "4px";
+      scaleEl.style.borderColor = "transparent";
+    }
   });
 
   fitBtn.onclick = () => {
@@ -694,6 +1044,7 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
     hexRadius,
     heatmap: heatmapOverride,
     trips: tripsOverride,
+    typeFilter,
   }: {
     layerVisibility: string[];
     currentTime: number;
@@ -701,11 +1052,55 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
     hexRadius: number;
     heatmap?: HeatmapCell[];
     trips?: Trip[];
+    typeFilter?: string;
   }) {
     const activeHeatmap = heatmapOverride ?? heatmap;
     const activeTrips = tripsOverride ?? trips;
+    const zonesVisible = layerVisibility.includes("Zones");
+    const hexFilterKey =
+      typeFilter === "Pedestrian"
+        ? "pedestrian"
+        : typeFilter === "Vehicle"
+          ? "vehicle"
+          : "all";
+    const hexColors = HEX_COLOR_RANGES[hexFilterKey];
 
     return [
+      // Zone polygons (rendered below other layers)
+      ...(hasZones
+        ? [
+            new deck.GeoJsonLayer({
+              id: "zones",
+              data: { type: "FeatureCollection", features: zonePolygons },
+              getFillColor: ZONE_FILL_COLOR,
+              getLineColor: ZONE_LINE_COLOR,
+              getLineWidth: 2,
+              lineWidthMinPixels: 2,
+              lineWidthUnits: "pixels" as const,
+              stroked: true,
+              filled: true,
+              pickable: true,
+              autoHighlight: true,
+              highlightColor: [56, 189, 193, 80],
+              visible: zonesVisible,
+            }),
+            new deck.GeoJsonLayer({
+              id: "sub-zones",
+              data: { type: "FeatureCollection", features: subZonePolygons },
+              getFillColor: SUBZONE_FILL_COLOR,
+              getLineColor: SUBZONE_LINE_COLOR,
+              getLineWidth: 1.5,
+              lineWidthMinPixels: 2,
+              lineWidthUnits: "pixels" as const,
+              stroked: true,
+              filled: true,
+              pickable: true,
+              autoHighlight: true,
+              highlightColor: [245, 158, 11, 80],
+              visible: zonesVisible,
+            }),
+          ]
+        : []),
       new deck.HexagonLayer({
         id: "hexagon",
         data: [...activeHeatmap],
@@ -717,7 +1112,7 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
         extruded: true,
         pickable: true,
         opacity: 0.8,
-        colorRange: COLOR_RANGE,
+        colorRange: hexColors,
         visible: layerVisibility.includes("Density Hexagons"),
         transitions: {
           elevationScale: {
@@ -732,7 +1127,7 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
         getPath: (d: Trip) => d.coordinates,
         getTimestamps: (d: Trip) => d.timestamps,
         getColor: (d: Trip) =>
-          d.objectType === "pedestrian" ? PEDESTRIAN_COLOR : VEHICLE_COLOR,
+          d.objectType === "pedestrian" ? PEDESTRIAN_RGB : VEHICLE_RGB,
         widthMinPixels: 4,
         fadeTrail: true,
         trailLength: 180000,
@@ -740,15 +1135,21 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
         visible: layerVisibility.includes("Track Playback"),
       }),
       new deck.ScatterplotLayer({
-        id: "scatterplot",
-        data: activeHeatmap,
-        getPosition: (d: HeatmapCell) => [d.lon, d.lat],
-        getRadius: (d: HeatmapCell) => Math.sqrt(d.point_count) * 3,
-        getFillColor: (d: HeatmapCell) =>
-          d.object_type === "pedestrian" ? PEDESTRIAN_COLOR : VEHICLE_COLOR,
-        opacity: 0.6,
+        id: "trip-heads",
+        data: interpolateTripHeads(
+          activeTrips,
+          currentTime,
+          layerVisibility.includes("Track Playback"),
+        ),
+        getPosition: (d: TripHeadDatum) => d.position,
+        getFillColor: (d: TripHeadDatum) => d.color,
+        getRadius: 6,
+        radiusMinPixels: 5,
+        radiusMaxPixels: 10,
+        radiusUnits: "pixels" as const,
         pickable: true,
-        visible: layerVisibility.includes("Detection Points"),
+        antialiasing: true,
+        visible: layerVisibility.includes("Track Playback"),
       }),
     ];
   }
@@ -768,6 +1169,8 @@ export function createMovementMap(data: MovementMapData): MovementMapHandle {
     lightPillsContainer,
     currentStyle: "mapbox://styles/mapbox/standard" as string,
     timeMin,
+    timeRange,
+    updateHistogram,
     buildLayers,
   };
 }

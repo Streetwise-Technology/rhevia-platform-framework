@@ -1,6 +1,5 @@
 ---
 title: Movement Report
-theme: slate
 toc: false
 ---
 
@@ -54,6 +53,9 @@ const heatmap = await FileAttachment(`../data/${observable.params.org_subdomain}
 // Map data (thinned/aggregated for Deck.GL performance)
 const mapTracks = await FileAttachment(`../data/${observable.params.org_subdomain}/map-tracks.json`).json();
 const mapHeatmap = await FileAttachment(`../data/${observable.params.org_subdomain}/map-heatmap.json`).json();
+
+// Zone/sub-zone boundaries (static geometry, may be empty for some orgs)
+const zones = await FileAttachment(`../data/${observable.params.org_subdomain}/zones.json`).json();
 ```
 
 
@@ -254,10 +256,13 @@ display(<MetricCards summary={filteredSummary} />);
 
 ## Spatial Activity Map
 
+<p style="color: #6b7280; margin-top: -4px;">Map visualising movement density and flow patterns across the monitored area. Toggle layers and filters to explore different aspects of the data. <br> 
+Zoom and scroll, or hold down Control/Shift to rotate.</p>
+
 ${typePills()}
 
 ```js
-const deckMap = createMovementMap({heatmap: mapHeatmap, tracks: mapTracks, mapboxToken: MAPBOX_TOKEN});
+const deckMap = createMovementMap({heatmap: mapHeatmap, tracks: mapTracks, mapboxToken: MAPBOX_TOKEN, zones, timeline});
 ```
 
 ```js
@@ -271,8 +276,12 @@ const lightPreset = Generators.input(deckMap.lightPresetForm);
 
 ```js
 deckMap.overlay.setProps({
-  layers: deckMap.buildLayers({layerVisibility, currentTime, hexElevation, hexRadius, heatmap: filteredMapHeatmap, trips: filteredMapTrips})
+  layers: deckMap.buildLayers({layerVisibility, currentTime, hexElevation, hexRadius, heatmap: filteredMapHeatmap, trips: filteredMapTrips, typeFilter})
 });
+```
+
+```js
+deckMap.updateHistogram(filteredTimeline, typeFilter);
 ```
 
 ```js
@@ -305,12 +314,48 @@ ${deckMap.container}
 </div>
 
 ## Analytical Breakdown
-
-${typePills()}
+<p style="color: #6b7280; margin-top: -4px;">Detailed breakdowns of movement patterns, including temporal trends, speed profiles, directional flow, and zone-level statistics. Use the filters to explore specific subsets of the data.</p>
 
 ```js
-const timelineStyleInput = Inputs.radio([ "Area Chart","Bar Chart"], {value: "Area Chart", label: "Style"});
-const timelineStyle = Generators.input(timelineStyleInput);
+const timelineStyleForm = (() => {
+  const form = document.createElement("form");
+  form.value = "Area Chart";
+  const div = document.createElement("div");
+  div.classList.add("no-print");
+  Object.assign(div.style, {
+    display: "flex", gap: "6px", marginBottom: "4px",
+  });
+  const options = ["Area Chart", "Bar Chart"];
+  const buttons = options.map(label => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = label;
+    Object.assign(btn.style, {
+      padding: "4px 14px",
+      borderRadius: "999px",
+      border: "1px solid var(--theme-foreground-faintest)",
+      background: label === "Area Chart" ? "var(--theme-foreground)" : "transparent",
+      color: label === "Area Chart" ? "var(--theme-background)" : "var(--theme-foreground)",
+      cursor: "pointer",
+      fontSize: "13px",
+      fontWeight: "500",
+    });
+    btn.onclick = () => {
+      form.value = label;
+      form.dispatchEvent(new Event("input", { bubbles: true }));
+      buttons.forEach(b => {
+        const active = b.textContent === label;
+        b.style.background = active ? "var(--theme-foreground)" : "transparent";
+        b.style.color = active ? "var(--theme-background)" : "var(--theme-foreground)";
+      });
+    };
+    div.appendChild(btn);
+    return btn;
+  });
+  form.appendChild(div);
+  return form;
+})();
+const timelineStyle = Generators.input(timelineStyleForm);
 ```
 
 <div class="grid grid-cols-2" style="margin-top: 16px;">
@@ -318,7 +363,9 @@ const timelineStyle = Generators.input(timelineStyleInput);
 
 ### Activity Timeline
 
-<span class="no-print">${timelineStyleInput}</span>
+${typePills()}
+
+${timelineStyleForm}
 
 Detection frequency over time, binned in 5-minute intervals and stacked by object type. Hover over a bar for details.
 
@@ -327,19 +374,26 @@ ${resize((width) => timelineStyle === "Bar Chart" ? createActivityTimeline(filte
 </div>
 </div>
 
-<div class="grid grid-cols-2" style="margin-top: 12px;">
+<div class="grid grid-cols-1" style="margin-top: 12px;">
 <div class="card">
 
 ### Speed Profile
+
+${typePills()}
 
 Per-track average speed, grouped by object type. Each dot represents one track (grouped by track ID); the box plot shows the distribution (median, quartiles, whiskers). Hover for details.
 
 ${resize((width) => createSpeedProfile(filteredSpeedProfile, {width}))}
 
 </div>
+</div>
+
+<div class="grid grid-cols-1" style="margin-top: 12px;">
 <div class="card">
 
 ### Directional Breakdown
+
+${typePills()}
 
 Volume of detections by compass direction. Petal size represents count; purple shading shows pedestrian speed, orange shows vehicle speed (lighter = slower, darker = faster). Hover a petal for details.
 
@@ -399,6 +453,11 @@ const rawData = rawSourceFilter === "Heatmap" ? rawHeatmap : rawSpeedProfile;
 const rawSearch = Inputs.search(rawData, {placeholder: "Search raw data..."});
 const rawFiltered = Generators.input(rawSearch);
 ```
+
+<div class="card">
+<p style="color: #6b7280; margin-top: 0;">Filtered view of the underlying raw data for the selected source. Use the search box to filter rows based on any column.</p>
+</div>
+
 
 <div class="grid grid-cols-1" style="margin-top: 12px;">
 <div class="card">
