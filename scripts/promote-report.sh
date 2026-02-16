@@ -50,6 +50,19 @@ if [[ -z "${MAPBOX_TOKEN:-}" ]]; then
   exit 1
 fi
 
+# --- Validate GCP credentials ------------------------------------------------
+
+if [[ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]]; then
+  if [[ ! -f "$GOOGLE_APPLICATION_CREDENTIALS" ]]; then
+    echo "Error: GOOGLE_APPLICATION_CREDENTIALS points to a missing file: $GOOGLE_APPLICATION_CREDENTIALS" >&2
+    exit 1
+  fi
+  echo "  GCP auth: service account key (${GOOGLE_APPLICATION_CREDENTIALS})"
+  gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS" 2>/dev/null || true
+else
+  echo "  GCP auth: ambient (gcloud CLI login)"
+fi
+
 # --- Derive period slug -----------------------------------------------------
 # Extract date portion from ISO timestamps using bash parameter expansion.
 # This is cross-platform (works on both macOS and Linux).
