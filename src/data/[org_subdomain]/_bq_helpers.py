@@ -20,6 +20,11 @@ BQ_DATASET = "object_tracks_test"
 
 MS_TO_MPH = 2.23694
 
+# Table name overrides — when the BQ table name differs from the org slug.
+TABLE_NAME_MAP = {
+    "pip": "fif",
+}
+
 # 4-way cardinal direction CASE expression (90° bins).
 # Returns one of: North, East, South, West.
 CARDINAL_CASE = """
@@ -80,7 +85,8 @@ def get_table_fqn(org):
         print(f"Error: invalid org_subdomain '{org}'", file=sys.stderr)
         sys.exit(1)
     project = os.environ.get("BQ_PROJECT_ID", "studious-linker-467410-e9")
-    return f"`{project}.{BQ_DATASET}.{org}`"
+    table_name = TABLE_NAME_MAP.get(org, org)
+    return f"`{project}.{BQ_DATASET}.{table_name}`"
 
 
 def run_query(client, sql, period_start, period_end, extra_params=None):

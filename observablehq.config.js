@@ -1,11 +1,10 @@
 import "dotenv/config";
 
 const ORG_NAMES = {
-  fif: "Portsmouth International Port", // Should be "pip" to match subdomain, but needs to match dataset. TODO: update data source to match subdomain and update this mapping.
-  tfl: "Transport for London",
+  pip: "Portsmouth International Port",
 };
 
-const org = process.env.ORG_SUBDOMAIN || "fif"; // Ditto above about matching subdomain and dataset.
+const org = process.env.ORG_SUBDOMAIN || "pip";
 const orgDisplayName = ORG_NAMES[org] || org;
 
 export default {
@@ -31,7 +30,7 @@ export default {
   ],
 
   // Some additional configuration options and their defaults:
-  // theme: "default", // try "light", "dark", "slate", etc.
+  theme: "slate",
   header: "Rhevia: Movement Intelligence Report", // page header (defaults to title)
   footer: `Produced ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} · Powered by Rhevia`,
   // sidebar: true, // whether to show the sidebar
